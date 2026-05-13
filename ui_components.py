@@ -584,64 +584,108 @@ def render_poster():
     
     @st.dialog("🏠 房产投资测评海报", width="large")
     def show_poster():
-        # 强制所有文字为深灰色，解决白色背景看不见问题
-        st.markdown("""
-        <style>
-        .stMarkdown p, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {
-            color: #333333 !important;
-        }
-        </style>
-        """, unsafe_allow_html=True)
+        # 生成海报图片
+        from PIL import Image, ImageDraw, ImageFont
+        import io, os
         
-        st.markdown("---")
-        st.markdown("<h1 style='text-align:center; color:#165DFF;'>🏠 北京房产投资专业测评报告</h1>", unsafe_allow_html=True)
-        st.markdown("---")
+        img = Image.new('RGB', (750, 1000), '#FFFFFF')
+        draw = ImageDraw.Draw(img)
         
-        # 新增：完整房源基础信息（小区+价格+面积+户型）
-        st.markdown("## 📋 房源基础信息")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown(f"**小区名称：** {d.get('community', '未命名')}")
-            st.markdown(f"**所在区域：** {d.get('district', '未知')}")
-            st.markdown(f"**房屋总价：** {d.get('total_price', 0)} 万元")
-        with col2:
-            st.markdown(f"**建筑面积：** {d.get('area', 0)} ㎡")
-            st.markdown(f"**户型：** {d.get('house_type', '未知')}")
-            st.markdown(f"**资产类型：** {d.get('asset_type', '普通住宅')}")
+        # 尝试加载中文字体
+        font_paths = [
+            '/System/Library/Fonts/PingFang.ttc',
+            '/System/Library/Fonts/STHeiti Light.ttc',
+            '/System/Library/Fonts/Hiragino Sans GB.ttc',
+        ]
+        title_font = big_font = normal_font = small_font = None
+        for fp in font_paths:
+            if os.path.exists(fp):
+                try:
+                    title_font = ImageFont.truetype(fp, 32)
+                    big_font = ImageFont.truetype(fp, 48)
+                    normal_font = ImageFont.truetype(fp, 22)
+                    small_font = ImageFont.truetype(fp, 16)
+                    break
+                except: pass
+        if not normal_font:
+            title_font = big_font = normal_font = small_font = ImageFont.load_default()
         
-        st.markdown("---")
+        y = 30
+        # 顶部标题栏
+        draw.rectangle([(0, 0), (750, 80)], fill='#165DFF')
+        draw.text((375, 25), '🏠 北京房产投资测评报告', fill='#FFFFFF', font=title_font, anchor='mt')
+        y = 100
         
-        # 评分信息
-        st.markdown(f"<h3 style='text-align:center;'>推荐指数：<span style='color:#ffc107;'>{d['star']}</span></h3>", unsafe_allow_html=True)
-        st.markdown(f"<h3 style='text-align:center;'>综合评分：<span style='color:#165DFF;'>{d['total_score']}分</span> | 评级：<span style='color:#165DFF;'>{d['rank']}</span></h3>", unsafe_allow_html=True)
-        st.markdown(f"<h4 style='text-align:center; color:#165DFF;'>{defect_tip}</h4>", unsafe_allow_html=True)
+        # 房源基础信息
+        draw.text((30, y), '📋 房源基础信息', fill='#1E293B', font=normal_font)
+        y += 30
+        info_lines = [
+            f"小区：{d.get('community', '未命名')}    |    区域：{d.get('district', '未知')}",
+            f"总价：{d.get('total_price', 0)} 万元    |    面积：{d.get('area', 0)} ㎡    |    户型：{d.get('house_type', '未知')}",
+        ]
+        for line in info_lines:
+            draw.text((30, y), line, fill='#334155', font=small_font)
+            y += 22
+        draw.line([(30, y+5), (720, y+5)], fill='#E2E8F0', width=1)
+        y += 20
         
-        st.markdown("---")
+        # 评分
+        draw.text((375, y), f"{d['star']}  综合评分 {d['total_score']}分  |  {d['rank']}", fill='#165DFF', font=big_font, anchor='mt')
+        y += 55
+        defect_tip = f"缺陷数：{d['defect_score']}项" if d['defect_score']>0 else "无明显缺陷"
+        draw.text((375, y), defect_tip, fill='#64748B', font=normal_font, anchor='mt')
+        y += 35
+        draw.line([(30, y), (720, y)], fill='#E2E8F0', width=1)
+        y += 15
         
         # 核心指标
-        st.markdown("## 📊 核心指标")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("IRR年化收益率", f"{d['irr']}%")
-            st.metric("总净收益", f"{d['profit']} 万元")
-        with col2:
-            st.metric("每月净现金流", f"{d['month_cash']} 元")
-            st.metric("回本周期", d['payback'])
+        draw.text((30, y), '📊 核心指标', fill='#1E293B', font=normal_font)
+        y += 35
+        metrics = [
+            ('IRR年化收益率', f"{d['irr']}%", '#059669'),
+            ('总净收益', f"{d['profit']} 万元", '#2563EB'),
+            ('每月净现金流', f"{d['month_cash']} 元", '#7C3AED'),
+            ('回本周期', d['payback'], '#D97706'),
+        ]
+        for i, (label, value, color) in enumerate(metrics):
+            x = 30 + (i % 2) * 370
+            if i % 2 == 0 and i > 0: y += 70
+            draw.text((x, y), label, fill='#64748B', font=small_font)
+            draw.text((x, y+20), value, fill=color, font=ImageFont.truetype(font_paths[0], 36) if font_paths and os.path.exists(font_paths[0]) else small_font)
+        y += 90
+        draw.line([(30, y), (720, y)], fill='#E2E8F0', width=1)
+        y += 15
+        
+        # AI总结
+        draw.text((30, y), '💡 AI专业总结', fill='#1E293B', font=normal_font)
+        y += 30
+        ai_text = d.get('ai_one', '')[:120]
+        draw.text((30, y), ai_text, fill='#334155', font=small_font)
+        y += 30
+        draw.text((30, y), f"✅ {d.get('good', '')[:80]}", fill='#059669', font=small_font)
+        y += 25
+        draw.text((30, y), f"⚠️ {d.get('risk', '')[:80]}", fill='#DC2626', font=small_font)
+        y += 30
+        draw.text((30, y), f"📅 建议持有周期：{d.get('hold_period', '')}", fill='#334155', font=small_font)
+        
+        # 底部
+        draw.line([(30, 960), (720, 960)], fill='#E2E8F0', width=1)
+        draw.text((375, 975), '房地产投资评估模型 · 客观中立 仅供参考', fill='#9CA3AF', font=small_font, anchor='mt')
+        
+        buf = io.BytesIO()
+        img.save(buf, format='PNG')
+        img_bytes = buf.getvalue()
+        
+        st.download_button(
+            label='📥 下载海报图片',
+            data=img_bytes,
+            file_name='房产投资测评海报.png',
+            mime='image/png',
+            use_container_width=True
+        )
         
         st.markdown("---")
-        
-        # 专业评估
-        st.markdown("## 💡 AI专业总结")
-        st.info(d['ai_one'])
-        
-        st.success(f"✅ 核心优势：{d['good']}")
-        st.error(f"⚠️ 主要风险：{d['risk']}")
-        
-        st.markdown(f"📅 建议持有周期：**{d['hold_period']}**")
-        st.warning(f"🚨 风险提示：{d['risk_tip']}")
-        
-        st.markdown("---")
-        st.markdown("<p style='text-align:center; color:#666;'>截图即可保存分享</p>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align:center; color:#666;'>⬇️ 点击上方按钮下载高清海报</p>", unsafe_allow_html=True)
     
     show_poster()
 # 生成基金级报告（章节编号唯一+完整逻辑）
