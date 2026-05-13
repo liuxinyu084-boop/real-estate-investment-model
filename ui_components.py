@@ -1383,6 +1383,13 @@ def render_sidebar_v2():
     st.sidebar.title("🏠 房源参数")
     init_saves()
 
+    # ═══ 延迟加载：在 widget 创建前恢复已保存房源 ═══
+    if "_pending_load_house" in st.session_state:
+        data = st.session_state["_pending_load_house"]
+        for k, v in data.items():
+            st.session_state[k] = v
+        del st.session_state["_pending_load_house"]
+
     with st.sidebar.expander("📋 基础信息", expanded=True):
         st.text_input("小区名称", key="community")
         st.selectbox("行政区", ["东城","西城","朝阳","海淀","丰台","石景山","通州","昌平","顺义","大兴","房山","其他"], key="district")
@@ -1456,7 +1463,10 @@ def render_sidebar_v2():
         col_s1, col_s2 = st.sidebar.columns([3, 1])
         selected = col_s1.selectbox("已保存", [""] + house_list, key="saved_house_selector", label_visibility="collapsed")
         if selected and col_s2.button("📂", key="sidebar_load_btn"):
-            msg = load_house(selected)
+            # 延迟加载：保存到 pending，rerun 后在 widget 创建前应用
+            if selected in st.session_state.house_saves:
+                st.session_state["_pending_load_house"] = dict(st.session_state.house_saves[selected])
+                st.rerun()
             st.sidebar.success(msg)
     col_save1, col_save2 = st.sidebar.columns(2)
     save_name = col_save1.text_input("名称", key="sidebar_save_name", placeholder="保存为...")
