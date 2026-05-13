@@ -2206,3 +2206,215 @@ def render_tab_advanced(params):
 
     if not _msg_f:
         _msg_f = "高级模式已解锁"
+
+
+# ══════════════════════════════════════════════════════════════
+#  CLIENT MODE TABS
+# ══════════════════════════════════════════════════════════════
+
+def render_client_input(params):
+    """客户模式——房源输入页（展示已填参数汇总）"""
+    st.subheader("📝 当前房源参数")
+    if not st.session_state.get("community"):
+        st.info("请在左侧边栏填写房源信息。支持：基础信息、贷款参数、租金、微观参数、持有假设。")
+        return
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("小区", st.session_state.get("community", "—"))
+        st.metric("区域", st.session_state.get("district", "—"))
+        st.metric("总价", f"{st.session_state.get('total_price', 0)}万")
+        st.metric("面积", f"{st.session_state.get('area', 0)}㎡")
+    with col2:
+        st.metric("房龄", f"{st.session_state.get('house_age', 0)}年")
+        st.metric("户型", st.session_state.get("house_type_layout", "—"))
+        st.metric("楼层", st.session_state.get("floor_type", "—"))
+        st.metric("属性", st.session_state.get("property_type", "—"))
+    with col3:
+        st.metric("装修", st.session_state.get("decoration_level", "—"))
+        st.metric("学区", "是" if st.session_state.get("is_school") else "否")
+        st.metric("地铁", st.session_state.get("subway_distance", "—"))
+        st.metric("物业", st.session_state.get("property_level", "—"))
+    st.caption("如需修改 → 左侧边栏调整后重新点击「📊 开始评估」")
+
+
+def render_client_overview(params):
+    """客户模式——总览结论（复用已有逻辑）"""
+    render_tab_overview(params)
+
+
+def render_client_valuation(params):
+    """客户模式——估值分析"""
+    render_tab_valuation(params)
+
+
+def render_client_investment(params):
+    """客户模式——投资测算"""
+    render_tab_investment(params)
+
+
+def render_client_risk(params):
+    """客户模式——风险分析"""
+    render_tab_risk(params)
+
+
+def render_client_report(params):
+    """客户模式——专业报告"""
+    render_tab_report(params)
+
+
+# ══════════════════════════════════════════════════════════════
+#  ADMIN MODE TABS
+# ══════════════════════════════════════════════════════════════
+
+def render_admin_database():
+    """后台——小区数据库（占位）"""
+    st.subheader("🏘️ 小区数据库")
+    st.markdown("""
+    <div style="background:#F8FAFC;border:1px dashed #CBD5E1;border-radius:8px;padding:40px;text-align:center;margin:20px 0">
+        <div style="font-size:40px;margin-bottom:12px">🏗️</div>
+        <div style="font-size:16px;font-weight:600;color:#64748B">小区数据库 — 规划中</div>
+        <div style="font-size:13px;color:#94A3B8;margin-top:8px;line-height:1.8">
+            未来将支持：小区名称、行政区、板块、建成年代、小区均价、成交均价<br>
+            租金水平、成交周期、挂牌量、学区等级、地铁距离、流动性等级
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+def render_admin_samples():
+    """后台——成交样本库（接入已有数据）"""
+    st.subheader("📊 成交样本库")
+    try:
+        from transaction_dataset import load_dataset
+        ds = load_dataset()
+        if ds:
+            import pandas as pd
+            st.metric("累计样本", len(ds))
+            rows = []
+            for s in ds[:50]:
+                rows.append({
+                    "小区": s.get("community_name", "?")[:12],
+                    "区域": s.get("district", "?"),
+                    "面积": s.get("area", 0),
+                    "挂牌": s.get("listing_price", 0),
+                    "成交": s.get("final_transaction_price", 0),
+                    "类型": s.get("asset_type", "?")[:6],
+                    "估值": f"{s.get('model_estimation', 0):.0f}",
+                    "偏差": f"{s.get('estimation_deviation', 0):+.1%}",
+                })
+            st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True,
+                         column_order=["小区","区域","面积","挂牌","成交","估值","偏差","类型"])
+        else:
+            st.info("暂无成交样本。运行 transaction_input.py 录入数据。")
+    except ImportError:
+        st.warning("transaction_dataset 模块未找到")
+
+
+def render_admin_import():
+    """后台——数据导入（占位）"""
+    st.subheader("📥 数据导入")
+    st.markdown("""
+    <div style="background:#F8FAFC;border:1px dashed #CBD5E1;border-radius:8px;padding:40px;text-align:center;margin:20px 0">
+        <div style="font-size:40px;margin-bottom:12px">📤</div>
+        <div style="font-size:16px;font-weight:600;color:#64748B">数据导入 — 规划中</div>
+        <div style="font-size:13px;color:#94A3B8;margin-top:8px;line-height:1.8">
+            未来支持：手动录入、Excel导入、CSV导入、外部接口导入<br><br>
+            当前可用的命令行工具：<code>python3 transaction_input.py</code>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+def render_admin_params():
+    """后台——模型参数（占位+默认值展示）"""
+    st.subheader("⚙️ 模型参数")
+    try:
+        from valuation import DEFAULT_WEIGHTS
+        st.caption("当前估值模型默认权重（V5 冻结版本）")
+        rows = []
+        dim_names = {
+            "location":"地段价值","liquidity":"流动性","property_quality":"房屋品质",
+            "cashflow":"现金流能力","school_public":"学区与公共资源",
+            "risk_resilience":"抗跌与风险","leverage_safety":"金融杠杆安全",
+            "macro_cycle":"宏观周期","scarcity_potential":"稀缺性与未来潜力"
+        }
+        for k, v in DEFAULT_WEIGHTS.items():
+            rows.append({"维度": dim_names.get(k, k), "权重": f"{v:.0%}"})
+        import pandas as pd
+        st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+    except ImportError:
+        st.warning("valuation 模块未找到")
+    st.caption("参数调整功能将在后续版本开放")
+
+
+def render_admin_quality():
+    """后台——数据质量（接入已有系统）"""
+    st.subheader("✅ 数据质量")
+    try:
+        from data_quality_system import data_health_report, coverage_analysis
+        from transaction_dataset import load_dataset
+        ds = load_dataset()
+        if ds:
+            health = data_health_report(ds)
+            cov = coverage_analysis(ds)
+
+            col_q1, col_q2, col_q3, col_q4 = st.columns(4)
+            col_q1.metric("样本总数", health["total"])
+            col_q2.metric("平均质量分", f"{health['avg_quality_score']:.0f}/100")
+            col_q3.metric("高质量占比", f"{health['high_quality_pct']}%")
+            col_q4.metric("异常总数", health["total_anomalies"])
+
+            st.divider()
+            st.subheader("覆盖面")
+            col_c1, col_c2 = st.columns(2)
+            with col_c1:
+                st.write("**区域覆盖**：")
+                for dist, cnt in sorted(cov["district"].items()):
+                    if cnt == 0: st.markdown(f"- {dist}：⚠️ **0**")
+                    elif cnt <= 2: st.markdown(f"- {dist}：{cnt}")
+                    else: st.markdown(f"- {dist}：{cnt} ✅")
+            with col_c2:
+                st.write("**资产类型覆盖**：")
+                for at, cnt in cov["asset_type"].items():
+                    if cnt == 0: st.markdown(f"- {at}：⚠️ **0**")
+                    else: st.markdown(f"- {at}：{cnt}")
+        else:
+            st.info("暂无成交数据")
+    except ImportError as e:
+        st.warning(f"数据质量模块未加载: {e}")
+
+
+def render_admin_dashboard():
+    """后台——研究仪表盘（接入已有系统）"""
+    st.subheader("📈 研究仪表盘")
+    try:
+        from research_dashboard import core_statistics, rank_properties, stability_ranking
+        from transaction_dataset import load_dataset
+        ds = load_dataset()
+        if ds:
+            stats = core_statistics(ds)
+            ranks = rank_properties(ds)
+            stability = stability_ranking(ds)
+
+            col_d1, col_d2, col_d3, col_d4 = st.columns(4)
+            col_d1.metric("总样本", stats["total"])
+            col_d2.metric("平均偏差", f"{stats['avg_deviation']:+.1%}")
+            col_d3.metric("平均绝对偏差", f"{stats['avg_abs_deviation']:+.1%}")
+            col_d4.metric("趋势", stats["deviation_trend"])
+
+            st.divider()
+            st.subheader("⚠️ 最容易高估")
+            for r in ranks["most_overvalued"][:3]:
+                st.markdown(f"- {r['name']} ({r['district']}) 偏差 {r['deviation']:+.1%}")
+
+            st.subheader("📉 最容易低估")
+            for r in ranks["most_undervalued"][:3]:
+                st.markdown(f"- {r['name']} ({r['district']}) 偏差 {r['deviation']:+.1%}")
+
+            st.subheader("🟢 最稳定区域")
+            for dist, info in stability["most_stable"]:
+                st.markdown(f"- {dist} (偏差{info['abs_avg_deviation']:+.1%})")
+        else:
+            st.info("暂无成交数据。命令行运行：python3 research_dashboard.py")
+    except ImportError:
+        st.warning("research_dashboard 模块未加载")
