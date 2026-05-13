@@ -2057,7 +2057,7 @@ def _collect_structured_risks(result, p):
         risks.append({"name": "流动性风险", "level": "低", "detail": "流动性良好，市场接受度高。"})
 
     if age >= 25:
-        risks.append({"name": "房龄风险", "level": "高", detail=f"房龄{age}年，部分银行可能拒贷或缩短贷款年限，管线老化维修成本不可忽视。"})
+        risks.append({"name": "房龄风险", "level": "高", "detail": f"房龄{age}年，部分银行可能拒贷或缩短贷款年限, 管线老化维修成本不可忽视。"})
     elif age >= 15:
         risks.append({"name": "房龄风险", "level": "中", "detail": f"房龄{age}年，贷款年限和利率可能受限，建议提前咨询银行。"})
     else:
