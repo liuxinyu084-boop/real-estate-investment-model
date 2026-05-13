@@ -2367,53 +2367,84 @@ def render_tab_advanced(params):
 # ══════════════════════════════════════════════════════════════
 
 def render_client_input(params):
-    """客户模式——房源输入（支持手机向导/电脑专业模式）"""
+    """客户模式——手机优先苹果式分步向导"""
     import time
 
-    # 使用方式选择
+    # 模式切换（默认手机）
     if "input_mode" not in st.session_state:
         st.session_state["input_mode"] = "mobile"
-    mode = st.radio("使用方式", ["📱 手机简洁模式", "🖥️ 电脑专业模式"],
-                    horizontal=True, key="input_mode", label_visibility="collapsed")
-    is_mobile = mode == "📱 手机简洁模式"
+    mode = st.radio("方式", ["📱 简洁模式", "🖥️ 专业模式"], horizontal=True,
+                    key="input_mode", label_visibility="collapsed")
+    is_mobile = mode == "📱 简洁模式"
 
     if not is_mobile:
         _render_desktop_input()
         return
 
-    # ═══════════ 手机分步向导 ═══════════
+    # ═══════════ 手机简洁模式 ═══════════
     if "mobile_step" not in st.session_state:
-        st.session_state["mobile_step"] = 1
+        st.session_state["mobile_step"] = 0  # 0 = 首页
 
     step = st.session_state["mobile_step"]
-    total_steps = 5
+    total = 6
 
-    # 进度条
-    step_names = ["基础价格", "房屋情况", "租金贷款", "风险因素", "确认生成"]
-    pct = step / total_steps
-    st.progress(pct, f"步骤 {step}/{total_steps}：{step_names[step-1]}")
+    # ═══ 首页 ═══
+    if step == 0:
+        st.markdown("""
+        <div style="text-align:center;padding:30px 10px">
+            <div style="font-size:48px;margin-bottom:16px">🏠</div>
+            <div style="font-size:22px;font-weight:700;color:#0F172A;margin-bottom:8px">看房AI Book</div>
+            <div style="font-size:15px;color:#64748B;margin-bottom:32px;line-height:1.7">
+                帮你判断这套房<br>值不值得买
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        if st.button("开始评估 →", type="primary", use_container_width=True, key="start_wizard"):
+            st.session_state["mobile_step"] = 1
+            st.rerun()
+
+        st.caption("6 步完成评估 · 约需 2 分钟")
+        return
+
+    # 进度
+    step_titles = ["房源位置", "价格信息", "房屋情况", "投资假设", "风险因素", "确认信息"]
+    pct = step / total
+    st.progress(pct, f"步骤 {step}/{total} · {step_titles[step-1]}")
     st.divider()
 
-    # ═══ Step 1: 基础价格 ═══
+    # ═══ Step 1: 房源位置 ═══
     if step == 1:
-        st.subheader("📋 基础价格")
+        st.subheader("📍 这套房在哪？")
+        st.caption("先告诉我们这套房的位置，系统会根据区域和小区建立估值基础。")
         st.text_input("小区名称", placeholder="输入小区全称", key="community")
         st.selectbox("行政区", ["东城","西城","朝阳","海淀","丰台","石景山","通州","昌平","顺义","大兴","房山","其他"], key="district")
+        st.number_input("建筑面积(㎡)", 20, 500, 90, key="area")
+        if st.button("下一步：价格信息 →", type="primary", use_container_width=True, key="s1"):
+            st.session_state["mobile_step"] = 2; st.rerun()
+
+    # ═══ Step 2: 价格信息 ═══
+    elif step == 2:
+        st.subheader("💰 这套房多少钱？")
+        st.caption("价格是评估的核心，我们会对比挂牌价、模型估值和预测成交价。")
         c1, c2 = st.columns(2)
-        c1.number_input("建筑面积(㎡)", 20, 500, 90, key="area")
-        c2.number_input("当前报价(万元)", 50, 5000, 500, key="total_price")
-        st.number_input("原始挂牌价(万元)", 50, 5000, 500, key="listing_price")
+        c1.number_input("当前报价(万元)", 50, 5000, 500, key="total_price")
+        c2.number_input("原始挂牌价(万元)", 50, 5000, 500, key="listing_price")
         st.checkbox("已有真实成交价", False, key="has_final_price")
         if st.session_state.get("has_final_price"):
             st.number_input("真实成交价(万元)", 50, 5000, 500, key="final_transaction_price")
+        col_b, col_n = st.columns(2)
+        with col_b:
+            if st.button("← 上一步", use_container_width=True, key="s2b"):
+                st.session_state["mobile_step"] = 1; st.rerun()
+        with col_n:
+            if st.button("下一步：房屋情况 →", type="primary", use_container_width=True, key="s2"):
+                st.session_state["mobile_step"] = 3; st.rerun()
 
-        if st.button("下一步：房屋情况 →", type="primary", use_container_width=True, key="step1_next"):
-            st.session_state["mobile_step"] = 2
-            st.rerun()
-
-    # ═══ Step 2: 房屋情况 ═══
-    elif step == 2:
-        st.subheader("🏠 房屋情况")
+    # ═══ Step 3: 房屋情况 ═══
+    elif step == 3:
+        st.subheader("🏠 这套房本身怎么样？")
+        st.caption("房子的硬条件决定了它在市场中的真实位置。")
         c1, c2 = st.columns(2)
         c1.number_input("房龄(年)", 0, 70, 5, key="house_age")
         c2.selectbox("户型", ["1室1厅","2室1厅","2室2厅","3室1厅","3室2厅","4室及以上"], key="house_type_layout")
@@ -2421,180 +2452,117 @@ def render_client_input(params):
         c3.selectbox("楼层", ["低楼层","中楼层","高楼层","顶层","底层"], key="floor_type")
         c4.selectbox("朝向缺陷", ["无","东西向","北向","西北/东北"], key="orientation_defect")
         c5, c6 = st.columns(2)
-        c5.selectbox("房产属性", ["商品房","已购公房","回迁房","经济适用房","商住两用"], key="property_type")
-        c6.selectbox("装修程度", ["豪装","精装","简装","毛坯"], key="decoration_level")
+        c5.selectbox("装修程度", ["豪装","精装","简装","毛坯"], key="decoration_level")
+        c6.selectbox("房产属性", ["商品房","已购公房","回迁房","经济适用房","商住两用"], key="property_type")
         st.checkbox("有电梯", True, key="has_elevator")
+        col_b, col_n = st.columns(2)
+        with col_b:
+            if st.button("← 上一步", use_container_width=True, key="s3b"):
+                st.session_state["mobile_step"] = 2; st.rerun()
+        with col_n:
+            if st.button("下一步：投资假设 →", type="primary", use_container_width=True, key="s3"):
+                st.session_state["mobile_step"] = 4; st.rerun()
 
-        col_back, col_next = st.columns(2)
-        with col_back:
-            if st.button("← 上一步", use_container_width=True, key="step2_back"):
-                st.session_state["mobile_step"] = 1
-                st.rerun()
-        with col_next:
-            if st.button("下一步：租金贷款 →", type="primary", use_container_width=True, key="step2_next"):
-                st.session_state["mobile_step"] = 3
-                st.rerun()
-
-    # ═══ Step 3: 租金贷款 ═══
-    elif step == 3:
-        st.subheader("💰 租金与贷款")
+    # ═══ Step 4: 投资假设 ═══
+    elif step == 4:
+        st.subheader("📈 你打算怎么持有？")
+        st.caption("持有方式和贷款策略直接影响投资回报测算。")
         c1, c2 = st.columns(2)
-        c1.number_input("月租金(元)", 500, 100000, 5000, key="monthly_rent")
-        c2.slider("空置率(%)", 0, 50, 5, key="vacancy_rate")
-        c3, c4 = st.columns(2)
-        c3.number_input("持有年限", 1, 50, 10, key="hold_years")
-        c4.number_input("房价年涨幅(%)", -10.0, 15.0, 3.0, key="price_growth")
-
+        c1.number_input("当前月租金(元)", 500, 100000, 5000, key="monthly_rent")
+        c2.number_input("计划持有年限", 1, 50, 10, key="hold_years")
         st.selectbox("贷款类型", ["不贷款","纯商业贷款","公积金+商业组合"], key="loan_type")
         lt = st.session_state.get("loan_type", "不贷款")
         if lt != "不贷款":
-            c5, c6 = st.columns(2)
-            c5.checkbox("首套房", True, key="is_first")
-            c6.slider("贷款比例(%)", 0, 85, 65, 5, key="loan_ratio")
-            c7, c8 = st.columns(2)
-            c7.slider("贷款年限", 5, 30, 30, key="loan_years")
-            c8.selectbox("还款方式", ["等额本息","等额本金"], key="repay_type")
+            c3, c4 = st.columns(2)
+            c3.slider("贷款比例(%)", 0, 85, 65, 5, key="loan_ratio")
+            c4.slider("贷款年限", 5, 30, 30, key="loan_years")
+
+        with st.expander("⚙️ 高级投资参数"):
+            st.slider("空置率(%)", 0, 50, 5, key="vacancy_rate")
+            st.number_input("租金年涨幅(%)", -5.0, 10.0, 2.0, key="rent_growth")
+            st.number_input("房价年涨幅(%)", -10.0, 15.0, 3.0, key="price_growth")
             if lt == "纯商业贷款":
                 st.number_input("商贷利率(%)", 2.5, 8.0, 3.8, key="loan_rate")
-            else:
-                c9, c10 = st.columns(2)
-                c9.number_input("公积金利率(%)", 2.5, 5.0, 3.1, key="gjj_rate")
-                c10.number_input("商贷利率(%)", 2.5, 8.0, 3.8, key="bank_rate")
+            elif lt != "不贷款":
+                c5, c6 = st.columns(2)
+                c5.number_input("公积金利率(%)", 2.5, 5.0, 3.1, key="gjj_rate")
+                c6.number_input("商贷利率(%)", 2.5, 8.0, 3.8, key="bank_rate")
+            st.selectbox("还款方式", ["等额本息","等额本金"], key="repay_type")
+            st.checkbox("首套房", True, key="is_first")
 
-        col_back, col_next = st.columns(2)
-        with col_back:
-            if st.button("← 上一步", use_container_width=True, key="step3_back"):
-                st.session_state["mobile_step"] = 2
-                st.rerun()
-        with col_next:
-            if st.button("下一步：风险因素 →", type="primary", use_container_width=True, key="step3_next"):
-                st.session_state["mobile_step"] = 4
-                st.rerun()
+        col_b, col_n = st.columns(2)
+        with col_b:
+            if st.button("← 上一步", use_container_width=True, key="s4b"):
+                st.session_state["mobile_step"] = 3; st.rerun()
+        with col_n:
+            if st.button("下一步：风险因素 →", type="primary", use_container_width=True, key="s4"):
+                st.session_state["mobile_step"] = 5; st.rerun()
 
-    # ═══ Step 4: 风险因素 ═══
-    elif step == 4:
-        st.subheader("⚠️ 风险因素")
+    # ═══ Step 5: 风险因素 ═══
+    elif step == 5:
+        st.subheader("⚠️ 这套房有没有特殊风险？")
+        st.caption("特殊因素对估值影响很大，如实填写才能得到准确评估。")
         st.selectbox("学区等级", ["普通学区","区重点","市重点","顶尖名校"], key="school_level")
         st.selectbox("地铁距离", ["500米内","1公里内","2公里内","2公里外"], key="subway_distance")
         c1, c2 = st.columns(2)
-        c1.selectbox("商场距离", ["1公里内","2公里内","2公里外"], key="mall_distance")
-        c2.selectbox("医院距离", ["1公里内","2公里内","2公里外"], key="hospital_distance")
-        c3, c4 = st.columns(2)
-        c3.selectbox("噪音环境", ["安静","一般","严重噪音"], key="street_noise")
-        c4.selectbox("户型缺陷", ["无","暗卫","暗厅","过道长","异形","无阳台"], key="layout_defect")
+        c1.selectbox("是否有硬伤", ["无","有抵押","有查封","共有产权","商住两用","凶宅/非正常死亡"], key="hard_defect")
+        c2.selectbox("户型缺陷", ["无","暗卫","暗厅","过道长","异形","无阳台"], key="layout_defect")
         st.selectbox("楼栋缺陷", ["无","低楼层遮挡","顶层漏水","西晒","临街","高架/铁路","垃圾站旁"], key="building_defect")
-        st.selectbox("硬伤缺陷", ["无","有抵押","有查封","共有产权","商住两用","凶宅/非正常死亡"], key="hard_defect")
 
-        col_back, col_next = st.columns(2)
-        with col_back:
-            if st.button("← 上一步", use_container_width=True, key="step4_back"):
-                st.session_state["mobile_step"] = 3
-                st.rerun()
-        with col_next:
-            if st.button("下一步：确认生成 →", type="primary", use_container_width=True, key="step4_next"):
-                st.session_state["mobile_step"] = 5
-                st.rerun()
+        with st.expander("📍 周边配套"):
+            c3, c4 = st.columns(2)
+            c3.selectbox("商场距离", ["1公里内","2公里内","2公里外"], key="mall_distance")
+            c4.selectbox("医院距离", ["1公里内","2公里内","2公里外"], key="hospital_distance")
+            c5, c6 = st.columns(2)
+            c5.selectbox("物业水平", ["顶级","优质","普通","较差"], key="property_level")
+            c6.selectbox("车位配比", ["1:2以上","1:1.5","1:1","1:0.8","1:0.5以下"], key="parking_ratio")
 
-    # ═══ Step 5: 确认生成 ═══
-    elif step == 5:
-        st.subheader("📋 确认房源信息")
+        col_b, col_n = st.columns(2)
+        with col_b:
+            if st.button("← 上一步", use_container_width=True, key="s5b"):
+                st.session_state["mobile_step"] = 4; st.rerun()
+        with col_n:
+            if st.button("下一步：确认信息 →", type="primary", use_container_width=True, key="s5"):
+                st.session_state["mobile_step"] = 6; st.rerun()
+
+    # ═══ Step 6: 确认生成 ═══
+    elif step == 6:
+        st.subheader("📋 确认后生成评估报告")
         comm = st.session_state.get("community", "—")
         dist = st.session_state.get("district", "—")
         area = st.session_state.get("area", 90)
         price = st.session_state.get("total_price", "—")
+        age = st.session_state.get("house_age", 0)
         htype = st.session_state.get("house_type_layout", "—")
         floor = st.session_state.get("floor_type", "—")
-        orient = st.session_state.get("orientation_defect", "—")
-        deco = st.session_state.get("decoration_level", "—")
-        age = st.session_state.get("house_age", 0)
         ptype = st.session_state.get("property_type", "—")
         hard = st.session_state.get("hard_defect", "无")
         loan = st.session_state.get("loan_type", "不贷款")
-        subway = st.session_state.get("subway_distance", "—")
-        school = st.session_state.get("school_level", "—")
+        deco = st.session_state.get("decoration_level", "—")
 
         st.markdown(f"""
-        <div style="background:#F8FAFC;border-radius:12px;padding:20px;line-height:2;font-size:15px;color:#334155">
-            <b>🏘️ {comm}</b> ｜ {dist}<br>
-            📐 {area}㎡ ｜ {htype} ｜ {floor} ｜ {orient}<br>
-            💰 报价 <b>{price}万</b> ｜ 房龄 {age}年 ｜ {ptype}<br>
-            🛠️ 装修 {deco} ｜ {'⚠️ 硬伤: '+hard if hard!='无' else '无硬伤'}<br>
-            🏦 {loan} ｜ 🚇 {subway} ｜ 🎒 {school}
+        <div style="background:#F8FAFC;border:2px solid #E2E8F0;border-radius:16px;padding:24px;line-height:2.2;font-size:16px;color:#334155">
+            <div style="font-size:20px;font-weight:700;color:#0F172A;margin-bottom:12px">🏘️ {comm}</div>
+            📍 {dist} ｜ 📐 {area}㎡ ｜ 💰 <b>{price}万</b><br>
+            🏠 {htype} ｜ {floor} ｜ {ptype}<br>
+            🕐 房龄 {age}年 ｜ 🛠️ {deco}<br>
+            {'⚠️ 硬伤: '+hard if hard!='无' else '✅ 无硬伤'}<br>
+            🏦 {loan}
         </div>
         """, unsafe_allow_html=True)
 
-        col_back, col_gen = st.columns([1, 2])
-        with col_back:
-            if st.button("← 上一步", use_container_width=True, key="step5_back"):
-                st.session_state["mobile_step"] = 4
-                st.rerun()
-        with col_gen:
-            if st.button("📊 生成评估报告", type="primary", use_container_width=True, key="step5_gen"):
+        col_b, col_g = st.columns([1, 2])
+        with col_b:
+            if st.button("← 上一步", use_container_width=True, key="s6b"):
+                st.session_state["mobile_step"] = 5; st.rerun()
+        with col_g:
+            if st.button("📊 生成评估报告", type="primary", use_container_width=True, key="s6gen"):
                 st.session_state["report_generated"] = True
                 st.session_state["report_generated_at"] = datetime.now().strftime("%m-%d %H:%M")
                 st.session_state["client_active_tab"] = "📋 总览结论"
                 st.success("✅ 评估报告已生成，正在为你展示总览结论")
                 time.sleep(0.5)
                 st.rerun()
-
-
-def _render_desktop_input():
-    """电脑专业模式——完整分组输入"""
-    st.subheader("📝 房源信息")
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.text_input("小区名称", key="community", placeholder="输入小区全称")
-        st.selectbox("行政区", ["东城","西城","朝阳","海淀","丰台","石景山","通州","昌平","顺义","大兴","房山","其他"], key="district")
-        st.number_input("建筑面积(㎡)", 20, 500, 90, key="area")
-        st.number_input("房龄(年)", 0, 70, 5, key="house_age")
-    with c2:
-        st.selectbox("户型", ["1室1厅","2室1厅","2室2厅","3室1厅","3室2厅","4室及以上"], key="house_type_layout")
-        st.selectbox("楼层", ["低楼层","中楼层","高楼层","顶层","底层"], key="floor_type")
-        st.selectbox("朝向缺陷", ["无","东西向","北向","西北/东北"], key="orientation_defect")
-        st.selectbox("房产属性", ["商品房","已购公房","回迁房","经济适用房","商住两用"], key="property_type")
-    with c3:
-        st.number_input("总价(万元)", 50, 5000, 500, key="total_price")
-        st.checkbox("满二", True, key="is_full2")
-        st.checkbox("满五唯一", False, key="is_full5_only")
-        st.selectbox("装修程度", ["豪装","精装","简装","毛坯"], key="decoration_level")
-
-    st.divider(); st.subheader("💰 租金与投资")
-    c4, c5, c6 = st.columns(3)
-    with c4: st.number_input("月租金(元)", 500, 100000, 5000, key="monthly_rent"); st.slider("空置率(%)", 0, 50, 5, key="vacancy_rate")
-    with c5: st.number_input("持有年限", 1, 50, 10, key="hold_years"); st.number_input("房价年涨幅(%)", -10.0, 15.0, 3.0, key="price_growth")
-    with c6: st.number_input("租金年涨幅(%)", -5.0, 10.0, 2.0, key="rent_growth")
-
-    st.divider(); st.subheader("🏦 贷款信息")
-    st.selectbox("贷款类型", ["不贷款","纯商业贷款","公积金+商业组合"], key="loan_type")
-    lt = st.session_state.get("loan_type", "不贷款")
-    if lt != "不贷款":
-        c7, c8, c9 = st.columns(3)
-        with c7: st.checkbox("首套房", True, key="is_first"); st.slider("贷款比例(%)", 0, 85, 65, 5, key="loan_ratio")
-        with c8: st.slider("贷款年限", 5, 30, 30, key="loan_years"); st.selectbox("还款方式", ["等额本息","等额本金"], key="repay_type")
-        with c9:
-            if lt == "纯商业贷款": st.number_input("商贷利率(%)", 2.5, 8.0, 3.8, key="loan_rate")
-            else: st.number_input("公积金利率(%)", 2.5, 5.0, 3.1, key="gjj_rate"); st.number_input("商贷利率(%)", 2.5, 8.0, 3.8, key="bank_rate")
-
-    st.divider(); st.subheader("🔍 房源微观")
-    c10, c11, c12 = st.columns(3)
-    with c10: st.selectbox("物业水平", ["顶级","优质","普通","较差"], key="property_level"); st.selectbox("车位配比", ["1:2以上","1:1.5","1:1","1:0.8","1:0.5以下"], key="parking_ratio")
-    with c11: st.selectbox("地铁距离", ["500米内","1公里内","2公里内","2公里外"], key="subway_distance"); st.selectbox("商场距离", ["1公里内","2公里内","2公里外"], key="mall_distance")
-    with c12: st.selectbox("医院距离", ["1公里内","2公里内","2公里外"], key="hospital_distance"); st.selectbox("学区等级", ["普通学区","区重点","市重点","顶尖名校"], key="school_level")
-
-    st.selectbox("户型缺陷", ["无","暗卫","暗厅","过道长","异形","无阳台"], key="layout_defect")
-    st.selectbox("楼栋缺陷", ["无","低楼层遮挡","顶层漏水","西晒","临街","高架/铁路","垃圾站旁"], key="building_defect")
-    st.selectbox("硬伤", ["无","有抵押","有查封","共有产权","商住两用","凶宅/非正常死亡"], key="hard_defect")
-
-    st.divider()
-    col_act1, col_act2, col_act3 = st.columns([1, 2, 1])
-    with col_act2:
-        if st.button("📊 生成评估报告", type="primary", use_container_width=True, key="desktop_gen"):
-            st.session_state["report_generated"] = True
-            st.session_state["report_generated_at"] = datetime.now().strftime("%m-%d %H:%M")
-            st.session_state["client_active_tab"] = "📋 总览结论"
-            st.success("✅ 评估报告已生成")
-            time.sleep(0.3)
-            st.rerun()
 
 def render_client_overview(params):
     """客户模式——总览结论（复用已有逻辑）"""
