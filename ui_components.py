@@ -586,7 +586,7 @@ def render_poster():
     from PIL import Image, ImageDraw, ImageFont
     import io, os
     
-    W, H = 800, 1100
+    W, H = 800, 1300
     C_BG='#F0F2F5'; C_WHITE='#FFFFFF'; C_DARK='#1A1A2E'; C_BLUE='#2563EB'
     C_GREEN='#059669'; C_RED='#DC2626'; C_GREY='#64748B'; C_GREY2='#8899AA'
     C_TEXT='#334155'; C_BORDR='#E2E8F0'; C_AMBER='#D97706'; C_PURPLE='#7C3AED'
@@ -607,11 +607,6 @@ def render_poster():
         draw.rounded_rectangle([x, y, x+w, y+h], 10, fill=C_WHITE, outline=C_BORDR, width=1)
         draw.text((x+w/2, y+14), label, fill=C_GREY, font=F['tiny'], anchor='mt')
         draw.text((x+w/2, y+38), val, fill=color, font=F['h2'], anchor='mt')
-    
-    def mini_card(x, y, w, label, score):
-        draw.rounded_rectangle([x, y, x+w, y+50], 8, fill=C_WHITE, outline=C_BORDR, width=1)
-        draw.text((x+w/2, y+10), label, fill=C_GREY, font=F['tiny'], anchor='mt')
-        draw.text((x+w/2, y+30), '{}分'.format(score), fill=C_BLUE, font=F['h3'], anchor='mt')
     
     y = 0
     # ========== 顶部横幅 ==========
@@ -650,20 +645,38 @@ def render_poster():
         card(cx, cy, cw, ch, lb, vl, cl)
     y += 2 * (ch + 10) + 14
     
-    # ========== 多因子量化评分 ==========
+    # ========== 多因子量化评分（含雷达图）==========
     qs = st.session_state.calc_result.get('quant_score', {})
     if qs:
         draw.text((56, y), '多因子量化评分', fill=C_DARK, font=F['h3'])
-        y += 26
-        dims = [('区位价值', qs.get('location',0)), ('房屋品质', qs.get('property',0)),
-                ('交易成本', qs.get('transaction',0)), ('财务收益', qs.get('financial',0)),
-                ('流动性', qs.get('liquidity',0)), ('风险水平', qs.get('risk',0))]
-        mw = 112
-        for i,(lb,sc) in enumerate(dims):
-            mx = 48 + (i % 6) * (mw + 5)
-            my = y + (i // 6) * 58
-            mini_card(mx, my, mw, lb, sc)
-        y += 72
+        y += 24
+        # 雷达图 (280x250)
+        import math
+        radar_w, radar_h = 330, 260
+        radar = Image.new('RGBA', (radar_w, radar_h), (0,0,0,0))
+        rd = ImageDraw.Draw(radar)
+        dims = ['区位价值','房屋品质','交易成本','财务收益','流动性','风险水平']
+        vals = [qs.get('location',0), qs.get('property',0), qs.get('transaction',0),
+                qs.get('financial',0), qs.get('liquidity',0), qs.get('risk',0)]
+        N, max_v = 6, 30
+        rcx, rcy, rr = 148, 125, 92
+        for rl in [rr/3, rr*2/3, rr]:
+            pts = [(rcx+rl*math.cos(-math.pi/2+2*math.pi*i/N), rcy+rl*math.sin(-math.pi/2+2*math.pi*i/N)) for i in range(N)]
+            rd.polygon(pts, outline='#D0D5DD')
+        dpts = [(rcx+(vals[i]/max_v)*rr*math.cos(-math.pi/2+2*math.pi*i/N),
+                 rcy+(vals[i]/max_v)*rr*math.sin(-math.pi/2+2*math.pi*i/N)) for i in range(N)]
+        rd.polygon(dpts, fill='#2563EB33', outline='#2563EB')
+        for i in range(N):
+            a = -math.pi/2 + 2*math.pi*i/N
+            rd.line([rcx, rcy, rcx+rr*math.cos(a), rcy+rr*math.sin(a)], fill='#D0D5DD', width=1)
+            lx = rcx+(rr+28)*math.cos(a); ly = rcy+(rr+28)*math.sin(a)
+            tw = rd.textlength(dims[i], font=F['tiny'])
+            rd.text((lx-tw/2, ly-7), dims[i], fill=C_TEXT, font=F['tiny'])
+            sx = rcx+(vals[i]/max_v)*rr*math.cos(a); sy = rcy+(vals[i]/max_v)*rr*math.sin(a)
+            rd.ellipse([sx-4, sy-4, sx+4, sy+4], fill='#1D4ED8')
+            rd.text((sx, sy-16), str(vals[i]), fill='#1D4ED8', font=F['tiny'], anchor='mt')
+        img.paste(radar, (48, y), radar)
+        y += 270
     
     # ========== AI分析 ==========
     draw.rounded_rectangle([40, y, W-40, y+130], 12, fill=C_WHITE, outline=C_BORDR, width=1)
@@ -727,20 +740,21 @@ def render_poster():
         
         st.markdown("---")
         
-        # 多因子量化评分
+        # 多因子量化评分（含雷达图）
         if 'calc_result' in st.session_state and st.session_state.calc_result:
             qs = st.session_state.calc_result.get('quant_score', {})
             if qs:
                 st.markdown("## 📈 多因子量化评分")
+                st.plotly_chart(st.session_state.calc_result['radar_fig'], use_container_width=True)
                 dims = [('区位价值', qs.get('location',0)), ('房屋品质', qs.get('property',0)),
                         ('交易成本', qs.get('transaction',0)), ('财务收益', qs.get('financial',0)),
                         ('流动性', qs.get('liquidity',0)), ('风险水平', qs.get('risk',0))]
-                row1 = st.columns(3)
+                cols = st.columns(3)
                 for i in range(3):
-                    row1[i].metric(dims[i][0], '{}分'.format(dims[i][1]))
-                row2 = st.columns(3)
+                    cols[i].metric(dims[i][0], '{}分'.format(dims[i][1]))
+                cols2 = st.columns(3)
                 for i in range(3):
-                    row2[i].metric(dims[i+3][0], '{}分'.format(dims[i+3][1]))
+                    cols2[i].metric(dims[i+3][0], '{}分'.format(dims[i+3][1]))
         
         st.markdown("---")
         
