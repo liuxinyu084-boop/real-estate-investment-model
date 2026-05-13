@@ -1621,44 +1621,146 @@ def render_tab_overview(params):
 # ═══════════ Tab B: 估值分析 ═══════════
 
 def render_tab_valuation(params):
-    """估值分析——完整因子加减分"""
+    """估值分析——四价对比 + 因子解释 + 可信度"""
     from valuation import calculate_property_valuation
+    from dataset_analysis import compute_confidence_score
+    from transaction_dataset import load_dataset
     import os
 
     p = _get_val_params()
     result = calculate_property_valuation(p)
 
-    # 核心指标
-    st.subheader("📊 估值指标")
-    m1, m2, m3, m4, m5, m6 = st.columns(6)
-    m1.metric("安全边际", f"{result['safety_margin']:+.1%}")
-    m2.metric("微观评分", f"{result['micro_unit_score']}/100")
-    m3.metric("流动性", f"{result['liquidity_score']}/100")
-    m4.metric("参考价", f"{result['market_reference_value']:.0f}万")
-    m5.metric("模型估值", f"{result['final_model_value']:.0f}万")
-    m6.metric("议价空间", f"{result['predicted_negotiation_range'][0]:.0%}~{result['predicted_negotiation_range'][1]:.0%}")
+    model = result["final_model_value"]
+    asking = result["asking_price"]
+    market_ref = result["market_reference_value"]
+    est_final = result["estimated_final_transaction_price"]
+    level = result["valuation_level"]
+    margin = result["safety_margin"]
+    icon = result["level_icon"]
+
+    # ═══════════ 1. 四价对比 ═══════════
+    st.subheader("💰 四价对比")
+    st.caption("以下四个价格含义不同，请仔细区分。模型估值代表系统认为的合理价值，预测成交价不代表值得购买。")
+
+    # 是否有真实成交价
+    has_final = st.session_state.get("has_final_price", False)
+    final_price = st.session_state.get("final_transaction_price", 0)
+
+    n_cols = 5 if has_final and final_price > 0 else 4
+    cols = st.columns(n_cols)
+    with cols[0]:
+        st.metric("原始挂牌价", f"{asking:.0f}万", help="卖方最初对外报价，不代表真实市场价值")
+    with cols[1]:
+        st.metric("当前报价", f"{asking:.0f}万", help="本次判断高估/低估的主要参照价格")
+    with cols[2]:
+        st.metric("模型估值", f"{model:.0f}万", delta=f"{margin:+.1%}",
+                 help="系统基于小区基准价、房源微观条件、风险折价和流动性因素计算出的合理价值")
+    with cols[3]:
+        st.metric("预测成交价", f"{est_final:.0f}万",
+                 help="系统预测当前市场可能出现的成交水平，不代表值得购买")
+    if has_final and final_price > 0:
+        with cols[4]:
+            st.metric("真实成交价", f"{final_price}万", help="如果已经成交，用于校准和复盘")
+
+    # 模型估值 vs 预测成交价 解释
+    st.markdown(f"""
+    <div style="background:#FFFBEB;border-left:4px solid #D97706;border-radius:0 8px 8px 0;padding:12px 16px;margin:12px 0;font-size:13px;color:#92400E;line-height:1.7">
+        <b>⚠️ 注意区分：</b>模型估值 = 站在买方角度的合理价值；预测成交价 = 当前市场可能成交的价格。<br>
+        预测成交价高于模型估值，并不代表值得以那个价格购买，可能说明市场对风险定价不足，或买方信息不充分。
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ═══════════ 2. 估值结论解释 ═══════════
+    explain_map = {
+        "明显低估": "当前报价明显低于模型估值，具备较高安全边际。但仍需核查产权、房屋硬伤和成交真实性，确认低价的真实原因。",
+        "略低估": "当前报价低于模型估值，价格具备一定吸引力。建议结合下方风险项继续谈判，争取在合理区间成交。",
+        "价格合理": "当前报价接近模型估值，属于合理区间。是否购买主要取决于自住需求、资金成本和持有周期，无需过度纠结价格。",
+        "略高估": "当前报价高于模型估值，安全边际不足。建议参考建议买入区间继续压价，尤其关注下方减分项作为谈判筹码。",
+        "明显高估": "当前报价明显高于模型估值。若无特殊自住需求或稀缺性支撑，不建议按当前价格买入。下方列出具体折价因素供谈判参考。",
+    }
+    explain = explain_map.get(level, "")
+    st.markdown(f"""
+    <div style="background:#F8FAFC;border-radius:8px;padding:16px;margin:8px 0;font-size:14px;color:#475569;line-height:1.8">
+        <b>{icon} {level}</b><br>{explain}
+    </div>
+    """, unsafe_allow_html=True)
 
     st.divider()
-    # 加减分
-    _render_factors_human(result)
+
+    # ═══════════ 3. 影响因子（人话版 + 业务标签） ═══════════
+    st.subheader("📊 影响因子明细")
+
+    label_map = {
+        "学区强化": "学区溢价", "房龄弱化": "房龄宽松", "装修弱化": "装修淡化",
+        "流动性强化": "流动性加成", "流动性惩罚": "流动性折价",
+        "小户型溢价": "小户型溢价", "稀缺景观溢价": "景观加成",
+        "景观弱化": "景观淡化", "风险折价": "高风险折价",
+        "稀缺性溢价": "稀缺性加成", "低密度溢价": "低密加成",
+        "租售比溢价": "收租溢价", "地铁强化": "地铁加成",
+        "低总价溢价": "低总价加成",
+    }
+
+    all_adj = result.get("core_details", []) + result.get("macro_details", []) + result.get("liquidity_details", [])
+    pos = sorted([d for d in all_adj if d["adjustment"] > 0.002], key=lambda x: -x["adjustment"])
+    neg = sorted([d for d in all_adj if d["adjustment"] < -0.002], key=lambda x: x["adjustment"])
+
+    col_l, col_r = st.columns(2)
+    with col_l:
+        st.markdown("**🟢 加分因素**")
+        for d in pos[:6]:
+            label = label_map.get(d.get("factor_name", ""), d.get("factor_name", ""))
+            val = d.get("value", "")
+            if d.get("factor_id") == "house_age":
+                actual_age = p.get("house_age", 0)
+                if actual_age: val = f"{actual_age}年"
+            explain = _humanize_factor(d["factor_name"], val, d["adjustment"])
+            st.markdown(f"<div style='padding:4px 0;font-size:13px'><b style='color:#059669'>+{d['adjustment']:.0%}</b> {label}：{explain[:80]}</div>", unsafe_allow_html=True)
+
+    with col_r:
+        st.markdown("**🔴 减分因素**")
+        for d in neg[:6]:
+            label = label_map.get(d.get("factor_name", ""), d.get("factor_name", ""))
+            val = d.get("value", "")
+            if d.get("factor_id") == "house_age":
+                actual_age = p.get("house_age", 0)
+                if actual_age: val = f"{actual_age}年"
+            explain = _humanize_factor(d["factor_name"], val, d["adjustment"])
+            st.markdown(f"<div style='padding:4px 0;font-size:13px'><b style='color:#DC2626'>{d['adjustment']:.0%}</b> {label}：{explain[:80]}</div>", unsafe_allow_html=True)
 
     st.divider()
-    # 资产类型
-    st.subheader("🏷️ 资产类型")
-    st.info(f"**{result['asset_name']}** — {result['asset_features']}")
-    if result.get("activated_rules"):
-        st.caption("规则： " + ", ".join(result["activated_rules"]))
 
-    # 流动性
-    st.subheader("💧 流动性")
-    lq = result["liquidity_score"]
-    if lq >= 70: diff = "容易出手"
-    elif lq >= 50: diff = "正常周转"
-    elif lq >= 30: diff = "有难度"
-    else: diff = "难出手"
-    c1, c2 = st.columns(2)
-    c1.metric("成交难度", diff)
-    c2.metric("评分", f"{lq}/100")
+    # ═══════════ 4. TOP5 关键影响因子 ═══════════
+    st.subheader("📈 TOP5 关键影响因子")
+    top5 = sorted(all_adj, key=lambda x: -abs(x["adjustment"]))[:5]
+    for i, d in enumerate(top5):
+        sign = "+" if d["adjustment"] >= 0 else ""
+        color = "#059669" if d["adjustment"] >= 0 else "#DC2626"
+        val = d.get("value", "")
+        if d.get("factor_id") == "house_age":
+            actual_age = p.get("house_age", 0)
+            if actual_age: val = f"{actual_age}年"
+        explain = _humanize_factor(d["factor_name"], val, d["adjustment"])
+        label = label_map.get(d.get("factor_name", ""), d.get("factor_name", ""))
+        st.progress(min(abs(d["adjustment"]) * 8, 1.0),
+                     text=f"{i+1}. {label} ({sign}{d['adjustment']:.0%})：{explain[:60]}")
+
+    st.divider()
+
+    # ═══════════ 5. 估值可信度说明 ═══════════
+    st.subheader("🎯 估值可信度")
+    try:
+        ds = load_dataset() if os.path.exists("transaction_dataset.json") else []
+        conf = compute_confidence_score(ds, result.get("asset_type")) if ds else {"grade": "C", "reason": "无样本"}
+    except Exception:
+        conf = {"grade": "C", "reason": "数据模块未加载"}
+
+    st.metric("可信度等级", f"{conf['grade']} 级")
+    hard = p.get("hard_defect", "无")
+    if conf["grade"] in ["C", "D"]:
+        st.caption("当前该类型样本量有限，估值结果建议结合人工判断。")
+    if hard != "无":
+        st.caption("硬伤类房源成交离散度较高，估值可信度低于普通住宅，建议以实地尽调为准。")
+    st.caption(conf.get("reason", ""))
 
 
 # ═══════════ Tab C: 投资测算 ═══════════
