@@ -1727,6 +1727,7 @@ def render_tab_report(params):
     district = st.session_state.get("district", "朝阳")
     area = st.session_state.get("area", 90)
     asking = result["asking_price"]
+    hard_defect = p.get("hard_defect", "无")
     today = date.today().strftime("%Y年%m月%d日")
 
     # ─── 报告CSS ───
@@ -1793,9 +1794,17 @@ def render_tab_report(params):
         buy_advice, buy_tag = "仅适合高风险投资者", "red"
     else: buy_advice, buy_tag = "不建议当前价格买入", "red"
 
-    safe_buy = round(asking * (1 - nego[1]), 0)
-    fair_buy = round(result["estimated_final_transaction_price"], 0)
-    aggressive_buy = round(asking * (1 - nego[0]), 0)
+    # 建议买入价基于模型估值（不是挂牌价）
+    is_highrisk = (atype == "高风险型" or hard_defect != "无")
+    hard_defect_val = p.get("hard_defect", "无")
+    if is_highrisk and hard_defect_val in ["凶宅/非正常死亡", "有查封", "共有产权", "商住两用"]:
+        safe_buy = round(model * 0.85, 0)
+        fair_buy = round(model * 0.95, 0)
+        aggressive_buy = round(model * 1.00, 0)
+    else:
+        safe_buy = round(model * 0.90, 0)
+        fair_buy = round(model * 0.98, 0)
+        aggressive_buy = round(model * 1.05, 0)
 
     concl_cls = "undervalued" if "低估" in level else ("overvalued" if "高估" in level else "")
 
@@ -1822,7 +1831,9 @@ def render_tab_report(params):
             <div class="rpt-metric"><div class="val">{safe_buy:.0f}万</div><div class="lbl">安全买入价</div></div>
             <div class="rpt-metric"><div class="val">{fair_buy:.0f}万</div><div class="lbl">合理买入价</div></div>
             <div class="rpt-metric"><div class="val">{aggressive_buy:.0f}万</div><div class="lbl">激进买入价</div></div>
-            <div class="rpt-metric"><div class="val">{asking:.0f}万</div><div class="lbl">当前挂牌价</div></div>
+            <div class="rpt-metric"><div class="val">{model:.0f}万</div><div class="lbl">模型估值</div></div>
+        </div>
+        <p style="font-size:11px;color:#94A3B8;margin-top:8px">建议买入区间：{safe_buy:.0f}万 ~ {aggressive_buy:.0f}万（基于模型估值 {model:.0f} 万）</p>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -1841,7 +1852,8 @@ def render_tab_report(params):
         <div class="rpt-divider"></div>
         <p style="font-size:13px;color:#64748B;line-height:1.7;">
             <b>模型估值</b>：基于小区参考均价，叠加朝向、楼层、装修、景观、噪音、采光、学区等{len(result.get('core_details',[]))+len(result.get('macro_details',[]))}项因子调整后的合理估值。代表该房源在当前市场条件下的<b>理论公允价值</b>。<br><br>
-            <b>预测成交价</b>：在模型估值基础上，考虑资产类型（{atype}）的流动性特征、当前议价空间（{nego[0]:.0%}~{nego[1]:.0%}）后，预测的<b>最可能实际成交水平</b>。两者差异反映了市场情绪、买卖双方博弈、低总价稀缺性等非量化因素。
+            <b>预测成交价</b>：在模型估值基础上，考虑资产类型（{atype}）的流动性特征、议价空间后，预测的<b>可能成交水平</b>。<br><br>
+            <b style="color:#DC2626;">⚠ 注意：预测成交价高于模型估值，并不代表该房源值得以那个价格购买，而是说明市场中仍可能存在信息不充分或风险定价不足的买方。</b>
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -1856,7 +1868,11 @@ def render_tab_report(params):
     for d in pos + neg:
         sign = "+" if d["adjustment"] >= 0 else ""
         color = "#059669" if d["adjustment"] >= 0 else "#DC2626"
-        explain = _humanize_factor(d["factor_name"], d.get("value", ""), d["adjustment"])
+        val = d.get("value", "")
+        if d.get("factor_id") == "house_age":
+            actual_age = p.get("house_age", 0)
+            if actual_age: val = f"{actual_age}年"
+        explain = _humanize_factor(d["factor_name"], val, d["adjustment"])
         st.markdown(f'<tr><td>{d["factor_name"]}</td><td style="color:{color};font-weight:600">{sign}{d["adjustment"]:.0%}</td><td>{explain}</td></tr>', unsafe_allow_html=True)
     st.markdown('</table></div>', unsafe_allow_html=True)
 
@@ -1999,6 +2015,8 @@ def _generate_final_one_liner(result, p):
     prop = p.get("property_type", "商品房")
     lq = result["liquidity_score"]
 
+    if "明显高估" in level and atype == "高风险型":
+        return f"不建议普通自住客户和普通投资者按当前价格购买。该房源属于{atype}类资产{'，存在'+hard if hard!='无' else ''}带来的重大不确定性。只有在价格大幅回落至建议买入区间内，并完成产权、历史事件、贷款、转手流动性等尽调后，才适合高风险投资者考虑。"
     if "明显高估" in level:
         if hard != "无":
             return f"该房源当前挂牌价明显高于模型合理估值，主要风险来自{hard}带来的心理折价与未来转手压力。若不能取得明显折价（至少{abs(margin):.0%}），不建议普通自住客户购买。"
@@ -2021,10 +2039,17 @@ def _investment_suitability(result, p):
     atype = result["asset_name"]
     margin = result["safety_margin"]
     lq = result["liquidity_score"]
+    hard = p.get("hard_defect", "无")
+    level = result["valuation_level"]
+
+    if atype == "高风险型" and hard in ["凶宅/非正常死亡", "有查封", "共有产权"]:
+        return "该IRR基于长期持有和假设出售价格测算，不代表低风险收益。对于此类高风险折价资产，IRR可能看起来较高，但其核心风险在于未来成交不确定性、买家池缩小和转手折价。仅适合做好充分尽调的高风险投资者。"
+    if atype == "高风险型":
+        return "该IRR受折价买入假设影响可能偏高。高风险资产的真实回报高度依赖实际成交价和顺利转手，不确定性较大。仅适合对市场有深刻理解的高阶投资者。"
+    if "明显高估" in level:
+        return "当前价格偏高，即使IRR测算显示正收益，也不代表当前价位值得买入。建议等待价格回调至合理区间。"
     if atype == "豪宅型" or atype == "别墅型":
         return "更适合自住享受+长期资产配置，不适合短线投资或追求高流动性。"
-    if atype == "高风险型":
-        return "仅适合对市场有深刻理解、愿意承担高风险的高阶投资者，不建议普通家庭作为首套房。"
     if margin > 0.05 and lq >= 50:
         return "具备一定的安全边际和流动性，适合自住兼保值。如有投资需求，可作为稳健型标的。"
     if lq >= 60:
@@ -2066,14 +2091,20 @@ def _collect_structured_risks(result, p):
     if school in ["顶尖名校", "市重点"]:
         risks.append({"name": "学区政策风险", "level": "中", "detail": "顶级学区房享受较高溢价，但多校划片、学位名额调整等政策变化可能导致学区价值缩水。"})
 
+    is_severe_defect = hard in ["凶宅/非正常死亡", "有查封", "共有产权", "商住两用"]
     if hard != "无":
-        risks.append({"name": "硬伤风险", "level": "高", "detail": f"存在{hard}问题，市场对此类房源存在系统性折价，未来转手难度显著增加。"})
+        risks.append({"name": "硬伤风险", "level": "高", "detail": f"存在{hard}问题，市场对此类房源存在系统性心理折价，未来转手时买家池将显著缩小。"})
 
     if prop in ["回迁房", "经济适用房", "商住两用"]:
         risks.append({"name": "产权风险", "level": "高", "detail": f"{prop}存在贷款受限、税费偏高、交易周期长等固有问题。"})
 
-    risks.append({"name": "转手风险", "level": "中" if lq < 60 else "低",
-                     "detail": f"作为{atype}，{'接盘能力偏弱，转手周期可能偏长' if lq < 60 else '市场接受度尚可，正常条件下可以转手'}。"})
+    # 硬伤强制提升流动性/转手风险
+    if is_severe_defect:
+        risks.append({"name": "流动性风险", "level": "高", "detail": "由于存在严重硬伤，即使低总价可能吸引部分买家，但整体买家池明显变窄，不能判定为低流动性。"})
+        risks.append({"name": "转手风险", "level": "高", "detail": f"该类房源未来转手高度依赖折价幅度。若未来买方对历史事件敏感，成交周期可能显著拉长。"})
+    else:
+        risks.append({"name": "转手风险", "level": "中" if lq < 60 else "低",
+                         "detail": f"作为{atype}，{'接盘能力偏弱，转手周期可能偏长' if lq < 60 else '该类房源未来转手高度依赖折价幅度。若未来买方对历史事件敏感，成交周期可能显著拉长。'}。"})
     return risks
 
 
@@ -2083,6 +2114,17 @@ def _collect_structured_buyers(result, p):
     level = result["valuation_level"]
     lq = result["liquidity_score"]
     margin = result["safety_margin"]
+
+    is_severe = hard in ["凶宅/非正常死亡", "有查封", "共有产权", "商住两用"]
+
+    if is_severe and atype == "高风险型":
+        return [
+            {"type": "自住客户", "suitable": False, "reason": "严重硬伤房源不适合普通自住客户，心理负担和未来转手压力较大。"},
+            {"type": "投资客户", "suitable": False, "reason": "仅适合高风险投资者，且必须在大幅折价+充分尽调后才考虑。"},
+            {"type": "收租客户", "suitable": False, "reason": "虽然租金逻辑可能成立，但转手风险极高，不能简单判断为适合收租。"},
+            {"type": "保值客户", "suitable": False, "reason": "该类资产不具备保值属性，价格波动和不确定性较大。"},
+            {"type": "高风险博弈", "suitable": True, "reason": "仅在大幅折价（模型估值×0.85以下）并完成全面尽调后，适合极少数专业高风险投资者。"},
+        ]
 
     return [
         {"type": "自住客户", "suitable": "明显高估" not in level,
