@@ -2453,7 +2453,7 @@ def render_client_input(params):
     if st.button("📊 生成评估报告", type="primary", use_container_width=True, key="fast_gen"):
         st.session_state["report_generated"] = True
         st.session_state["report_generated_at"] = datetime.now().strftime("%m-%d %H:%M")
-        st.session_state["client_active_tab"] = "📋 总览结论"
+        st.session_state["_pending_client_page"] = "📋 总览结论"
         st.success("✅ 评估报告已生成，正在为你展示总览结论")
         time.sleep(0.5)
         st.rerun()
