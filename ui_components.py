@@ -586,107 +586,98 @@ def render_poster():
     from PIL import Image, ImageDraw, ImageFont
     import io, os
     
-    W, H = 800, 1200
-    # 配色
-    C_BG   = '#F0F2F5'
-    C_WHITE= '#FFFFFF'
-    C_DARK = '#1A1A2E'
-    C_BLUE = '#2563EB'
-    C_GREEN= '#059669'
-    C_RED  = '#DC2626'
-    C_GREY = '#64748B'
-    C_LGREY='#8899AA'
-    C_TEXT = '#334155'
-    C_BORDR='#E2E8F0'
-    C_AMBER='#D97706'
-    C_PURPLE='#7C3AED'
+    W, H = 800, 1100
+    C_BG='#F0F2F5'; C_WHITE='#FFFFFF'; C_DARK='#1A1A2E'; C_BLUE='#2563EB'
+    C_GREEN='#059669'; C_RED='#DC2626'; C_GREY='#64748B'; C_GREY2='#8899AA'
+    C_TEXT='#334155'; C_BORDR='#E2E8F0'; C_AMBER='#D97706'; C_PURPLE='#7C3AED'
     
     img = Image.new('RGB', (W, H), C_BG)
     draw = ImageDraw.Draw(img)
     
-    # 字体
     fps = ['/System/Library/Fonts/PingFang.ttc','/System/Library/Fonts/STHeiti Light.ttc','/System/Library/Fonts/Hiragino Sans GB.ttc']
     F = {}
-    sizes = {'hero':44,'h1':32,'h2':24,'h3':20,'body':18,'small':15,'tiny':13}
-    for fp in fps:
-        if os.path.exists(fp):
-            try:
-                for k,s in sizes.items():
-                    F[k] = ImageFont.truetype(fp, s)
-                break
-            except: pass
-    if not F: F = {k:ImageFont.load_default() for k in sizes}
+    for k,s in [('hero',40),('h1',28),('h2',22),('h3',18),('body',16),('small',14),('tiny',12)]:
+        for fp in fps:
+            if os.path.exists(fp):
+                try: F[k]=ImageFont.truetype(fp,s); break
+                except: pass
+        if k not in F: F[k]=ImageFont.load_default()
     
-    # 辅助函数
-    def section(x, y, w, h, bg=C_WHITE):
-        draw.rounded_rectangle([x, y, x+w, y+h], 12, fill=bg, outline=C_BORDR, width=1)
-    
-    def metric_card(x, y, w, h, label, val, color):
+    def card(x, y, w, h, label, val, color):
         draw.rounded_rectangle([x, y, x+w, y+h], 10, fill=C_WHITE, outline=C_BORDR, width=1)
-        draw.text((x+w/2, y+20), label, fill=C_GREY, font=F['tiny'], anchor='mt')
-        draw.text((x+w/2, y+50), val, fill=color, font=F['h3'], anchor='mt')
+        draw.text((x+w/2, y+14), label, fill=C_GREY, font=F['tiny'], anchor='mt')
+        draw.text((x+w/2, y+38), val, fill=color, font=F['h2'], anchor='mt')
+    
+    def mini_card(x, y, w, label, score):
+        draw.rounded_rectangle([x, y, x+w, y+50], 8, fill=C_WHITE, outline=C_BORDR, width=1)
+        draw.text((x+w/2, y+10), label, fill=C_GREY, font=F['tiny'], anchor='mt')
+        draw.text((x+w/2, y+30), '{}分'.format(score), fill=C_BLUE, font=F['h3'], anchor='mt')
     
     y = 0
-    # ===== 顶部横幅 =====
-    draw.rectangle([0, 0, W, 100], fill=C_DARK)
-    draw.text((W/2, 30), 'BEIJING  REAL  ESTATE', fill=C_LGREY, font=F['tiny'], anchor='mt')
-    draw.text((W/2, 62), '北京房产投资 · 专业测评报告', fill=C_WHITE, font=F['h1'], anchor='mt')
-    y = 120
+    # ========== 顶部横幅 ==========
+    draw.rectangle([0, 0, W, 90], fill=C_DARK)
+    draw.text((W/2, 28), 'BEIJING  REAL  ESTATE  INVESTMENT', fill=C_GREY2, font=F['tiny'], anchor='mt')
+    draw.text((W/2, 56), '北京房产投资 · 专业测评报告', fill=C_WHITE, font=F['h1'], anchor='mt')
+    y = 108
     
-    # ===== 房源信息卡片 =====
-    section(40, y, W-80, 130)
-    draw.text((70, y+18), '房源基础信息', fill=C_DARK, font=F['h2'])
-    draw.line([70, y+52, W-70, y+52], fill=C_BORDR, width=1)
-    info_items = [
-        ('小区', d.get('community','未命名')), ('区域', d.get('district','未知')),
-        ('总价', '{} 万元'.format(d.get('total_price',0))), ('面积', '{} m²'.format(d.get('area',0))),
-        ('户型', d.get('house_type','未知')), ('类型', d.get('asset_type','普通住宅')),
-    ]
-    for i,(k,v) in enumerate(info_items):
-        col_x = 70 + (i % 3) * 240
-        row_y = y + 64 + (i // 3) * 28
-        draw.text((col_x, row_y), '{}：{}'.format(k, v), fill=C_TEXT, font=F['body'])
-    y += 155
+    # ========== 房源信息 3列 ==========
+    draw.rounded_rectangle([40, y, W-40, y+100], 12, fill=C_WHITE, outline=C_BORDR, width=1)
+    draw.text((70, y+14), '房源基础信息', fill=C_DARK, font=F['h2'])
+    draw.line([70, y+42, W-70, y+42], fill=C_BORDR, width=1)
+    for i,(k,v) in enumerate([('小区',d.get('community','')),('区域',d.get('district','')),
+        ('总价','{}万'.format(d.get('total_price',0))),('面积','{}m²'.format(d.get('area',0))),
+        ('户型',d.get('house_type','')),('类型',d.get('asset_type',''))]):
+        cx = 70 + (i % 3) * 236
+        ry = y + 54 + (i // 3) * 22
+        draw.text((cx, ry), '{}：{}'.format(k,v), fill=C_TEXT, font=F['body'])
+    y += 116
     
-    # ===== 评分横幅 =====
-    section(40, y, W-80, 80, C_DARK)
-    draw.text((W/2, y+22), '综合评分  {} 分'.format(d['total_score']), fill=C_WHITE, font=F['hero'], anchor='mt')
-    draw.text((W/2, y+58), '{}     评级：{}'.format(d['star'], d['rank']), fill=C_LGREY, font=F['small'], anchor='mt')
-    y += 105
+    # ========== 评分条 ==========
+    draw.rounded_rectangle([40, y, W-40, y+60], 12, fill=C_DARK)
+    draw.text((W/2, y+16), '综合评分  {} 分      {}      评级：{}'.format(d['total_score'], d['star'], d['rank']), fill=C_WHITE, font=F['h2'], anchor='mt')
+    y += 76
     
-    # ===== 核心指标 2x2 =====
-    draw.text((50, y), '核心财务指标', fill=C_DARK, font=F['h2'])
-    y += 35
-    cw, ch = 345, 90
-    metrics = [
-        ('IRR年化收益率', '{}%'.format(d['irr']), C_GREEN),
-        ('总净收益', '{} 万元'.format(d['profit']), C_BLUE),
-        ('每月净现金流', '{} 元'.format(d['month_cash']), C_PURPLE),
-        ('回本周期', str(d['payback']), C_AMBER),
-    ]
-    for i,(lb,vl,cl) in enumerate(metrics):
-        x = 50 + (i % 2) * (cw + 10)
+    # ========== 核心财务指标 2x2 ==========
+    draw.text((56, y), '核心财务指标', fill=C_DARK, font=F['h3'])
+    y += 28
+    cw, ch = 346, 78
+    for i,(lb,vl,cl) in enumerate([('IRR年化收益率','{}%'.format(d['irr']),C_GREEN),
+        ('总净收益','{} 万元'.format(d['profit']),C_BLUE),
+        ('每月净现金流','{} 元'.format(d['month_cash']),C_PURPLE),
+        ('回本周期',str(d['payback']),C_AMBER)]):
+        cx = 48 + (i % 2) * (cw + 12)
         cy = y + (i // 2) * (ch + 10)
-        metric_card(x, cy, cw, ch, lb, vl, cl)
-    y += 2 * (ch + 10) + 25
+        card(cx, cy, cw, ch, lb, vl, cl)
+    y += 2 * (ch + 10) + 14
     
-    # ===== AI总结 =====
-    section(40, y, W-80, 170)
-    draw.text((70, y+18), 'AI 专业分析', fill=C_DARK, font=F['h2'])
-    draw.line([70, y+52, W-70, y+52], fill=C_BORDR, width=1)
-    # 总结
-    ai_txt = d.get('ai_one','')[:100]
-    draw.text((70, y+62), ai_txt, fill=C_TEXT, font=F['body'])
-    # 优势/风险
-    draw.text((70, y+100), '优势：{}'.format(d.get('good','')[:50]), fill=C_GREEN, font=F['small'])
-    draw.text((70, y+126), '风险：{}'.format(d.get('risk','')[:50]), fill=C_RED, font=F['small'])
-    draw.text((70, y+150), '建议持有周期：{}'.format(d.get('hold_period','')), fill=C_GREY, font=F['tiny'])
-    y += 200
+    # ========== 多因子量化评分 ==========
+    qs = st.session_state.calc_result.get('quant_score', {})
+    if qs:
+        draw.text((56, y), '多因子量化评分', fill=C_DARK, font=F['h3'])
+        y += 26
+        dims = [('区位价值', qs.get('location',0)), ('房屋品质', qs.get('property',0)),
+                ('交易成本', qs.get('transaction',0)), ('财务收益', qs.get('financial',0)),
+                ('流动性', qs.get('liquidity',0)), ('风险水平', qs.get('risk',0))]
+        mw = 112
+        for i,(lb,sc) in enumerate(dims):
+            mx = 48 + (i % 6) * (mw + 5)
+            my = y + (i // 6) * 58
+            mini_card(mx, my, mw, lb, sc)
+        y += 72
     
-    # ===== 底部 =====
-    draw.line([40, y, W-40, y], fill=C_BORDR, width=1)
-    draw.text((W/2, y+18), '本报告由「房地产投资评估模型」自动生成', fill=C_LGREY, font=F['tiny'], anchor='mt')
-    draw.text((W/2, y+38), '客观中立 · 仅供参考 · 不构成投资建议', fill=C_LGREY, font=F['tiny'], anchor='mt')
+    # ========== AI分析 ==========
+    draw.rounded_rectangle([40, y, W-40, y+130], 12, fill=C_WHITE, outline=C_BORDR, width=1)
+    draw.text((70, y+14), 'AI 专业分析', fill=C_DARK, font=F['h2'])
+    draw.line([70, y+40, W-70, y+40], fill=C_BORDR, width=1)
+    draw.text((70, y+50), d.get('ai_one','')[:95], fill=C_TEXT, font=F['body'])
+    draw.text((70, y+76), '优势：{}'.format(d.get('good','')[:50]), fill=C_GREEN, font=F['small'])
+    draw.text((70, y+98), '风险：{}'.format(d.get('risk','')[:50]), fill=C_RED, font=F['small'])
+    draw.text((70, y+118), '建议持有：{}'.format(d.get('hold_period','')), fill=C_GREY, font=F['tiny'])
+    y += 148
+    
+    # ========== 底部 ==========
+    draw.rounded_rectangle([40, y, W-40, y+40], 8, fill=C_DARK)
+    draw.text((W/2, y+20), '本报告由「房地产投资评估模型」生成 · 客观中立 · 仅供参考', fill=C_GREY2, font=F['tiny'], anchor='mt')
     
     buf = io.BytesIO()
     img.save(buf, format='PNG')
@@ -733,6 +724,23 @@ def render_poster():
         with col2:
             st.metric("每月净现金流", f"{d['month_cash']} 元")
             st.metric("回本周期", d['payback'])
+        
+        st.markdown("---")
+        
+        # 多因子量化评分
+        if 'calc_result' in st.session_state and st.session_state.calc_result:
+            qs = st.session_state.calc_result.get('quant_score', {})
+            if qs:
+                st.markdown("## 📈 多因子量化评分")
+                dims = [('区位价值', qs.get('location',0)), ('房屋品质', qs.get('property',0)),
+                        ('交易成本', qs.get('transaction',0)), ('财务收益', qs.get('financial',0)),
+                        ('流动性', qs.get('liquidity',0)), ('风险水平', qs.get('risk',0))]
+                row1 = st.columns(3)
+                for i in range(3):
+                    row1[i].metric(dims[i][0], '{}分'.format(dims[i][1]))
+                row2 = st.columns(3)
+                for i in range(3):
+                    row2[i].metric(dims[i+3][0], '{}分'.format(dims[i+3][1]))
         
         st.markdown("---")
         
