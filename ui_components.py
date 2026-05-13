@@ -2368,97 +2368,187 @@ def render_tab_advanced(params):
 # ══════════════════════════════════════════════════════════════
 
 def render_client_input(params):
-    """客户模式——快速输入 + 高级调整"""
+    """手机优先翻页式向导"""
     import time
 
-    # 模式切换
-    if st.session_state.get("input_mode") not in ["fast", "professional"]:
-        st.session_state["input_mode"] = "fast"
-    mode = st.radio("方式", ["fast", "professional"],
-                    format_func=lambda x: "📱 快速评估" if x == "fast" else "🖥️ 专业模式",
-                    horizontal=True, key="input_mode", label_visibility="collapsed")
-    is_fast = (st.session_state.get("input_mode") == "fast")
-
-    if not is_fast:
-        _render_desktop_input()
-        return
-
-    # ═══════════ 快速评估模式 ═══════════
-    # 首次进入设置默认值
+    # 确保默认值
     _ensure_defaults()
 
-    st.markdown("""
-    <div style="text-align:center;padding:20px 10px 10px">
-        <div style="font-size:18px;font-weight:700;color:#0F172A">输入一套房，几分钟生成专业购房评估报告</div>
-    </div>
-    """, unsafe_allow_html=True)
+    if "wizard_step" not in st.session_state:
+        st.session_state["wizard_step"] = 0
 
-    # ── 核心输入区 ──
-    st.text_input("小区名称 *", placeholder="如：桃园里、阳光花园", key="community")
-    c1, c2 = st.columns(2)
-    c1.number_input("建筑面积(㎡) *", 15, 600, 90, key="area")
-    c2.number_input("当前报价(万元) *", 30, 5000, 500, key="total_price")
+    step = st.session_state["wizard_step"]
 
-    st.selectbox("贷款方式", ["不贷款","纯商业贷款","公积金+商业组合"], key="loan_type")
-    lt = st.session_state.get("loan_type", "不贷款")
-    if lt != "不贷款":
-        c3, c4 = st.columns(2)
-        c3.slider("贷款比例(%)", 0, 85, 65, 5, key="loan_ratio")
-        c4.slider("贷款年限", 5, 30, 30, key="loan_years")
+    # ═══════════ Step 0: Homepage ═══════════
+    if step == 0:
+        st.markdown("""
+        <div style="text-align:center;padding:40px 10px 20px">
+            <div style="font-size:52px;margin-bottom:12px">🏠</div>
+            <div style="font-size:24px;font-weight:800;color:#0F172A;margin-bottom:8px">看房AI Book</div>
+            <div style="font-size:16px;color:#64748B;line-height:1.8;margin-bottom:32px">
+                帮你判断这套房<br>值不值得买
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
-    # ── 报告类型 ──
+        # 三种报告卡片
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.markdown("""
+            <div style="background:#F0FDF4;border-radius:12px;padding:16px;text-align:center;height:140px">
+                <div style="font-size:28px">📱</div>
+                <div style="font-weight:700;color:#166534;margin:6px 0">简单版</div>
+                <div style="font-size:11px;color:#64748B">30秒看懂<br>能不能买</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with c2:
+            st.markdown("""
+            <div style="background:#F0F7FF;border-radius:12px;padding:16px;text-align:center;height:140px">
+                <div style="font-size:28px">📊</div>
+                <div style="font-weight:700;color:#1E40AF;margin:6px 0">详细版</div>
+                <div style="font-size:11px;color:#64748B">全面分析<br>为什么好/不好</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with c3:
+            st.markdown("""
+            <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;padding:16px;text-align:center;height:140px">
+                <div style="font-size:28px">🏦</div>
+                <div style="font-weight:700;color:#334155;margin:6px 0">基金级</div>
+                <div style="font-size:11px;color:#64748B">研究院级<br>专业评估</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        if st.button("开始评估 →", type="primary", use_container_width=True, key="wiz_start"):
+            st.session_state["wizard_step"] = 1
+            st.session_state["report_generated"] = False
+            st.rerun()
+
+        st.caption("📱 翻页式填写 · 约需2分钟完成")
+        return
+
+    # ═══════════ Progress bar ═══════════
+    step_names = ["开始", "位置", "价格", "贷款", "报告", "完成"]
+    pct = min(step, 5) / 5
+    st.progress(pct, f"第 {step} 步 · {step_names[step]}")
     st.divider()
-    st.caption("选择报告类型")
-    if st.session_state.get("report_type") not in ["simple", "detailed", "fund"]:
-        st.session_state["report_type"] = "simple"
-    rt = st.radio("报告类型", ["simple", "detailed", "fund"],
-        format_func=lambda x: {"simple":"📱 简单版 — 30秒看懂值不值得买",
-                               "detailed":"📊 详细版 — 全面分析为什么好/不好",
-                               "fund":"🏦 基金级 — 研究院级专业评估"}[x],
-        key="report_type", label_visibility="collapsed",
-        index={"simple":0,"detailed":1,"fund":2}.get(st.session_state.get("report_type","simple"),0))
 
-    # ── 高级调整（折叠）──
-    with st.expander("⚙️ 高级调整（可选）"):
-        st.caption("如果你认为系统默认值不准确，可以在这里自行修改。")
-        st.number_input("房龄(年)", 0, 70, key="house_age")
-        c5, c6 = st.columns(2)
-        c5.selectbox("户型", ["1室1厅","2室1厅","2室2厅","3室1厅","3室2厅","4室及以上"], key="house_type_layout")
-        c6.selectbox("楼层", ["低楼层","中楼层","高楼层","顶层","底层"], key="floor_type")
-        c7, c8 = st.columns(2)
-        c7.selectbox("装修程度", ["豪装","精装","简装","毛坯"], key="decoration_level")
-        c8.selectbox("朝向缺陷", ["无","东西向","北向","西北/东北"], key="orientation_defect")
-        c9, c10 = st.columns(2)
-        c9.selectbox("学区等级", ["普通学区","区重点","市重点","顶尖名校"], key="school_level")
-        c10.selectbox("地铁距离", ["500米内","1公里内","2公里内","2公里外"], key="subway_distance")
-        c11, c12 = st.columns(2)
-        c11.number_input("月租金(元)", 0, 100000, key="monthly_rent")
-        c12.slider("空置率(%)", 0, 50, key="vacancy_rate")
-        c13, c14 = st.columns(2)
-        c13.selectbox("房产属性", ["商品房","已购公房","回迁房","经济适用房","商住两用"], key="property_type")
-        c14.selectbox("物业水平", ["顶级","优质","普通","较差"], key="property_level")
-        c15, c16 = st.columns(2)
-        c15.selectbox("硬伤", ["无","有抵押","有查封","共有产权","商住两用","凶宅/非正常死亡"], key="hard_defect")
-        c16.selectbox("车位配比", ["1:2以上","1:1.5","1:1","1:0.8","1:0.5以下"], key="parking_ratio")
-        c17, c18 = st.columns(2)
-        c17.selectbox("商场距离", ["1公里内","2公里内","2公里外"], key="mall_distance")
-        c18.selectbox("医院距离", ["1公里内","2公里内","2公里外"], key="hospital_distance")
-        c19, c20 = st.columns(2)
-        c19.selectbox("户型缺陷", ["无","暗卫","暗厅","过道长","异形","无阳台"], key="layout_defect")
-        c20.selectbox("噪音环境", ["安静","一般","严重噪音"], key="street_noise")
-        st.number_input("持有年限", 1, 50, key="hold_years")
-        st.number_input("房价年涨幅(%)", -10.0, 15.0, key="price_growth")
+    # ═══════════ Step 1: Location ═══════════
+    if step == 1:
+        st.subheader("📍 这套房在哪？")
+        st.text_input("小区名称", placeholder="如：桃园里、阳光花园", key="community")
+        c1, c2 = st.columns(2)
+        c1.selectbox("行政区", ["东城","西城","朝阳","海淀","丰台","石景山","通州","昌平","顺义","大兴","房山","其他"], key="district")
+        c2.number_input("建筑面积(㎡)", 15, 600, 90, key="area")
+        if st.button("下一页：价格信息 →", type="primary", use_container_width=True, key="w1"):
+            st.session_state["wizard_step"] = 2; st.rerun()
 
-    # ── 生成按钮 ──
-    st.divider()
-    if st.button("📊 生成评估报告", type="primary", use_container_width=True, key="fast_gen"):
-        st.session_state["report_generated"] = True
-        st.session_state["report_generated_at"] = datetime.now().strftime("%m-%d %H:%M")
-        st.session_state["_pending_client_page"] = "📋 总览结论"
-        st.success("✅ 评估报告已生成，正在为你展示总览结论")
-        time.sleep(0.5)
-        st.rerun()
+    # ═══════════ Step 2: Price ═══════════
+    elif step == 2:
+        st.subheader("💰 这套房多少钱？")
+        st.number_input("当前报价(万元)", 30, 5000, 500, key="total_price")
+        st.number_input("原始挂牌价(万元)", 30, 5000, 500, key="listing_price", help="可选，不填默认等于当前报价")
+        st.checkbox("已有真实成交价", False, key="has_final_price")
+        if st.session_state.get("has_final_price"):
+            st.number_input("真实成交价(万元)", 30, 5000, 500, key="final_transaction_price")
+        cb1, cb2 = st.columns(2)
+        with cb1:
+            if st.button("← 上一页", use_container_width=True, key="w2b"):
+                st.session_state["wizard_step"] = 1; st.rerun()
+        with cb2:
+            if st.button("下一页：贷款方式 →", type="primary", use_container_width=True, key="w2"):
+                st.session_state["wizard_step"] = 3; st.rerun()
 
+    # ═══════════ Step 3: Loan ═══════════
+    elif step == 3:
+        st.subheader("🏦 怎么购买？")
+        lt = st.selectbox("贷款方式", ["不贷款","纯商业贷款","公积金+商业组合"], key="loan_type")
+        if lt != "不贷款":
+            c1, c2 = st.columns(2)
+            c1.slider("贷款比例(%)", 0, 85, 65, 5, key="loan_ratio")
+            c2.slider("贷款年限", 5, 30, 30, key="loan_years")
+        # 折叠高级
+        with st.expander("⚙️ 高级调整（房子具体情况）"):
+            c1, c2 = st.columns(2)
+            c1.number_input("房龄(年)", 0, 70, key="house_age")
+            c2.selectbox("户型", ["1室1厅","2室1厅","2室2厅","3室1厅","3室2厅","4室及以上"], key="house_type_layout")
+            c1, c2 = st.columns(2)
+            c1.selectbox("楼层", ["低楼层","中楼层","高楼层","顶层","底层"], key="floor_type")
+            c2.selectbox("装修程度", ["豪装","精装","简装","毛坯"], key="decoration_level")
+            c1, c2 = st.columns(2)
+            c1.selectbox("学区等级", ["普通学区","区重点","市重点","顶尖名校"], key="school_level")
+            c2.selectbox("地铁距离", ["500米内","1公里内","2公里内","2公里外"], key="subway_distance")
+            st.selectbox("硬伤", ["无","有抵押","有查封","共有产权","商住两用","凶宅/非正常死亡"], key="hard_defect")
+            st.number_input("月租金(元)", 0, 100000, key="monthly_rent")
+        cb1, cb2 = st.columns(2)
+        with cb1:
+            if st.button("← 上一页", use_container_width=True, key="w3b"):
+                st.session_state["wizard_step"] = 2; st.rerun()
+        with cb2:
+            if st.button("下一页：选择报告 →", type="primary", use_container_width=True, key="w3"):
+                st.session_state["wizard_step"] = 4; st.rerun()
+
+    # ═══════════ Step 4: Report type ═══════════
+    elif step == 4:
+        st.subheader("📋 选择报告类型")
+        if st.session_state.get("report_type") not in ["simple","detailed","fund"]:
+            st.session_state["report_type"] = "simple"
+        rt = st.radio("报告", ["simple","detailed","fund"], label_visibility="collapsed", key="report_type_wizard",
+            format_func=lambda x: {"simple":"📱 简单版 — 30秒看懂值不值得买",
+                                   "detailed":"📊 详细版 — 全面分析为什么好/不好",
+                                   "fund":"🏦 基金级 — 研究院级专业评估"}[x],
+            index={"simple":0,"detailed":1,"fund":2}.get(st.session_state["report_type"],0))
+        st.session_state["report_type"] = rt
+
+        # Show selected description
+        desc = {"simple":"适合普通自住客户。不看复杂参数，直接告诉你值不值得买、大概什么价合理。",
+                "detailed":"适合认真做购房决策的人。会解释为什么估值高/低、买入代价是什么、有哪些风险。",
+                "fund":"适合专业投资人和深度尽调。输出完整研究院级资产评估报告，包含压力测试、退出路径、敏感性分析。",
+        }
+        st.info(desc.get(rt, ""))
+
+        cb1, cb2 = st.columns(2)
+        with cb1:
+            if st.button("← 上一页", use_container_width=True, key="w4b"):
+                st.session_state["wizard_step"] = 3; st.rerun()
+        with cb2:
+            if st.button("📊 生成评估报告", type="primary", use_container_width=True, key="w4gen"):
+                st.session_state["report_generated"] = True
+                st.session_state["report_generated_at"] = datetime.now().strftime("%m-%d %H:%M")
+                st.session_state["wizard_step"] = 5
+                st.session_state["_pending_client_page"] = "📋 总览结论"
+                st.success("✅ 评估报告已生成")
+                time.sleep(0.5)
+                st.rerun()
+
+    # ═══════════ Step 5: Done page ═══════════
+    elif step == 5:
+        if not st.session_state.get("report_generated"):
+            st.session_state["wizard_step"] = 0; st.rerun()
+        st.success("✅ 评估报告已生成！")
+        comm = st.session_state.get("community","—")
+        dist = st.session_state.get("district","—")
+        area = st.session_state.get("area",90)
+        price = st.session_state.get("total_price","—")
+        rt = st.session_state.get("report_type","simple")
+        rt_name = {"simple":"简单版","detailed":"详细版","fund":"基金级"}.get(rt,rt)
+        st.markdown(f"""
+        <div style="background:#F0FDF4;border-radius:16px;padding:24px;text-align:center;margin:12px 0">
+            <div style="font-size:40px;margin-bottom:12px">📋</div>
+            <div style="font-size:18px;font-weight:700;color:#166534">{rt_name}报告已生成</div>
+            <div style="font-size:14px;color:#475569;margin-top:8px">{comm} · {dist} · {area}㎡ · {price}万</div>
+        </div>
+        """, unsafe_allow_html=True)
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("📋 查看结论", type="primary", use_container_width=True):
+                st.session_state["_pending_client_page"] = "📋 总览结论"; st.rerun()
+        with c2:
+            if st.button("📄 查看报告", use_container_width=True):
+                st.session_state["_pending_client_page"] = "📄 专业报告"; st.rerun()
+        if st.button("🔙 重新填写", use_container_width=True):
+            st.session_state["wizard_step"] = 0; st.session_state["report_generated"] = False; st.rerun()
+
+    return
 
 def _ensure_defaults():
     """首次进入设置系统默认值"""
