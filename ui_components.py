@@ -2114,6 +2114,7 @@ def _collect_structured_buyers(result, p):
     level = result["valuation_level"]
     lq = result["liquidity_score"]
     margin = result["safety_margin"]
+    hard = p.get("hard_defect", "") or ""
 
     is_severe = hard in ["凶宅/非正常死亡", "有查封", "共有产权", "商住两用"]
 
