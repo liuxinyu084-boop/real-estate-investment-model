@@ -2214,28 +2214,83 @@ def render_tab_advanced(params):
 # ══════════════════════════════════════════════════════════════
 
 def render_client_input(params):
-    """客户模式——房源输入页（展示已填参数汇总）"""
-    st.subheader("📝 当前房源参数")
-    if not st.session_state.get("community"):
-        st.info("请在左侧边栏填写房源信息。支持：基础信息、贷款参数、租金、微观参数、持有假设。")
-        return
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("小区", st.session_state.get("community", "—"))
-        st.metric("区域", st.session_state.get("district", "—"))
-        st.metric("总价", f"{st.session_state.get('total_price', 0)}万")
-        st.metric("面积", f"{st.session_state.get('area', 0)}㎡")
-    with col2:
-        st.metric("房龄", f"{st.session_state.get('house_age', 0)}年")
-        st.metric("户型", st.session_state.get("house_type_layout", "—"))
-        st.metric("楼层", st.session_state.get("floor_type", "—"))
-        st.metric("属性", st.session_state.get("property_type", "—"))
-    with col3:
-        st.metric("装修", st.session_state.get("decoration_level", "—"))
-        st.metric("学区", "是" if st.session_state.get("is_school") else "否")
-        st.metric("地铁", st.session_state.get("subway_distance", "—"))
-        st.metric("物业", st.session_state.get("property_level", "—"))
-    st.caption("如需修改 → 左侧边栏调整后重新点击「📊 开始评估」")
+    """客户模式——房源输入页（分组输入区）"""
+    st.subheader("📝 房源信息")
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.text_input("小区名称", key="community", placeholder="输入小区全称")
+        st.selectbox("行政区", ["东城","西城","朝阳","海淀","丰台","石景山","通州","昌平","顺义","大兴","房山","其他"], key="district")
+        st.number_input("建筑面积(㎡)", 20, 500, 90, key="area")
+        st.number_input("房龄(年)", 0, 70, 5, key="house_age")
+    with c2:
+        st.selectbox("户型", ["1室1厅","2室1厅","2室2厅","3室1厅","3室2厅","4室及以上"], key="house_type_layout")
+        st.selectbox("楼层", ["低楼层","中楼层","高楼层","顶层","底层"], key="floor_type")
+        st.selectbox("朝向缺陷", ["无","东西向","北向","西北/东北"], key="orientation_defect")
+        st.selectbox("房产属性", ["商品房","已购公房","回迁房","经济适用房","商住两用"], key="property_type")
+    with c3:
+        st.number_input("总价(万元)", 50, 5000, 500, key="total_price")
+        st.checkbox("满二", True, key="is_full2")
+        st.checkbox("满五唯一", False, key="is_full5_only")
+        st.selectbox("装修程度", ["豪装","精装","简装","毛坯"], key="decoration_level")
+
+    st.divider()
+    st.subheader("💰 租金与投资")
+    c4, c5, c6 = st.columns(3)
+    with c4:
+        st.number_input("月租金(元)", 500, 100000, 5000, key="monthly_rent")
+        st.slider("空置率(%)", 0, 50, 5, key="vacancy_rate")
+    with c5:
+        st.number_input("持有年限", 1, 50, 10, key="hold_years")
+        st.number_input("房价年涨幅(%)", -10.0, 15.0, 3.0, key="price_growth")
+    with c6:
+        st.number_input("租金年涨幅(%)", -5.0, 10.0, 2.0, key="rent_growth")
+
+    st.divider()
+    st.subheader("🏦 贷款信息")
+    st.selectbox("贷款类型", ["不贷款","纯商业贷款","公积金+商业组合"], key="loan_type")
+    lt = st.session_state.get("loan_type", "不贷款")
+    if lt != "不贷款":
+        c7, c8, c9 = st.columns(3)
+        with c7:
+            st.checkbox("首套房", True, key="is_first")
+            st.slider("贷款比例(%)", 0, 85, 65, 5, key="loan_ratio")
+        with c8:
+            st.slider("贷款年限", 5, 30, 30, key="loan_years")
+            st.selectbox("还款方式", ["等额本息","等额本金"], key="repay_type")
+        with c9:
+            if lt == "纯商业贷款":
+                st.number_input("商贷利率(%)", 2.5, 8.0, 3.8, key="loan_rate")
+            else:
+                st.number_input("公积金额度(万)", 0, 200, 0, 10, key="gjj_amount")
+                st.number_input("公积金利率(%)", 2.5, 5.0, 3.1, key="gjj_rate")
+                st.number_input("商贷利率(%)", 2.5, 8.0, 3.8, key="bank_rate")
+
+    st.divider()
+    st.subheader("🔍 房源微观")
+    c10, c11, c12 = st.columns(3)
+    with c10:
+        st.selectbox("物业水平", ["顶级","优质","普通","较差"], key="property_level")
+        st.selectbox("车位配比", ["1:2以上","1:1.5","1:1","1:0.8","1:0.5以下"], key="parking_ratio")
+        st.checkbox("学区房", False, key="is_school")
+        if st.session_state.get("is_school"):
+            st.selectbox("学区等级", ["普通学区","区重点","市重点","顶尖名校"], key="school_level")
+    with c11:
+        st.selectbox("地铁距离", ["500米内","1公里内","2公里内","2公里外"], key="subway_distance")
+        st.selectbox("商场距离", ["1公里内","2公里内","2公里外"], key="mall_distance")
+        st.selectbox("医院距离", ["1公里内","2公里内","2公里外"], key="hospital_distance")
+        st.selectbox("户型缺陷", ["无","暗卫","暗厅","过道长","异形","无阳台"], key="layout_defect")
+    with c12:
+        st.selectbox("楼栋缺陷", ["无","低楼层遮挡","顶层漏水","西晒","临街","高架/铁路","垃圾站旁"], key="building_defect")
+        st.selectbox("硬伤", ["无","有抵押","有查封","共有产权","商住两用","凶宅/非正常死亡"], key="hard_defect")
+        st.number_input("绿化率(%)", 0, 80, 30, key="green_rate")
+        st.number_input("容积率", 0.1, 5.0, 2.5, key="volume_rate")
+
+    st.divider()
+    col_act1, col_act2, col_act3 = st.columns([1, 2, 1])
+    with col_act2:
+        if st.button("📊 生成评估报告", type="primary", use_container_width=True, key="inline_eval_btn"):
+            st.rerun()
 
 
 def render_client_overview(params):
