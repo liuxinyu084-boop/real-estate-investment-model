@@ -1713,14 +1713,389 @@ def render_tab_risk(params):
 
 # ═══════════ Tab E: 专业报告 ═══════════
 
-_msg_e = ""
-
 def render_tab_report(params):
-    """专业报告"""
-    global _msg_e
-    if not _msg_e:
-        _msg_e = "👈 点击上方「📄 完整报告」按钮生成。报告将包含执行摘要、因子详解、方案对比等完整分析。"
-    st.info(_msg_e)
+    """研究院级专业评估报告"""
+    from valuation import calculate_property_valuation
+    import os
+    from datetime import date
+
+    p = _get_val_params()
+    result = calculate_property_valuation(p)
+
+    # 基础参数
+    community = st.session_state.get("community", "—")
+    district = st.session_state.get("district", "朝阳")
+    area = st.session_state.get("area", 90)
+    asking = result["asking_price"]
+    today = date.today().strftime("%Y年%m月%d日")
+
+    # ─── 报告CSS ───
+    st.markdown("""
+    <style>
+    .rpt-cover { background:linear-gradient(180deg,#0F172A,#1E293B);color:#fff;padding:40px 30px;
+                 border-radius:8px;text-align:center;margin-bottom:24px; }
+    .rpt-cover h1 { color:#fff !important;font-size:28px;font-weight:300;letter-spacing:4px;margin:0; }
+    .rpt-cover h2 { color:rgba(255,255,255,0.7) !important;font-size:16px;font-weight:400;margin:12px 0 24px; }
+    .rpt-cover-line { width:60px;height:1px;background:rgba(255,255,255,0.3);margin:16px auto; }
+    .rpt-page { background:#fff;border:1px solid #E2E8F0;border-radius:8px;padding:24px 28px;margin-bottom:20px;
+                box-shadow:0 1px 3px rgba(0,0,0,.04); }
+    .rpt-page h3 { font-size:17px;font-weight:700;color:#1E293B;margin:0 0 4px; }
+    .rpt-page .rpt-sub { font-size:12px;color:#94A3B8;margin-bottom:16px; }
+    .rpt-divider { border:0;border-top:1px solid #F1F5F9;margin:16px 0; }
+    .rpt-metric-row { display:flex;gap:16px;flex-wrap:wrap; }
+    .rpt-metric { flex:1;min-width:120px;background:#F8FAFC;border-radius:6px;padding:14px;text-align:center; }
+    .rpt-metric .val { font-size:22px;font-weight:800;color:#0F172A; }
+    .rpt-metric .lbl { font-size:11px;color:#94A3B8;margin-top:4px; }
+    .rpt-conclusion { background:#F8FAFC;border-left:4px solid #2563EB;padding:20px 24px;border-radius:0 8px 8px 0;margin:16px 0; }
+    .rpt-conclusion.undervalued { border-left-color:#059669; }
+    .rpt-conclusion.overvalued { border-left-color:#DC2626; }
+    .rpt-conclusion .c-title { font-size:14px;font-weight:700;color:#1E293B;margin-bottom:8px; }
+    .rpt-conclusion .c-body { font-size:14px;color:#475569;line-height:1.8; }
+    .rpt-tag { display:inline-block;padding:2px 10px;border-radius:4px;font-size:11px;font-weight:600;margin-right:6px; }
+    .rpt-tag.green { background:#ECFDF5;color:#059669; }
+    .rpt-tag.red { background:#FEF2F2;color:#DC2626; }
+    .rpt-tag.amber { background:#FFFBEB;color:#D97706; }
+    .rpt-tag.blue { background:#EFF6FF;color:#2563EB; }
+    .rpt-table { width:100%;font-size:13px;border-collapse:collapse; }
+    .rpt-table th { background:#F8FAFC;padding:8px 12px;text-align:left;font-weight:600;color:#64748B;border-bottom:2px solid #E2E8F0; }
+    .rpt-table td { padding:8px 12px;border-bottom:1px solid #F1F5F9;color:#334155; }
+    .rpt-footer { text-align:center;color:#94A3B8;font-size:11px;padding:20px; }
+    </style>""", unsafe_allow_html=True)
+
+    # ═══════════ 封面 ═══════════
+    st.markdown(f"""
+    <div class="rpt-cover">
+        <div style="font-size:11px;letter-spacing:6px;color:rgba(255,255,255,.4);margin-bottom:8px">KANFANG AI BOOK RESEARCH</div>
+        <h1>北京住宅投资价值评估报告</h1>
+        <div class="rpt-cover-line"></div>
+        <h2>Beijing Residential Property Investment Valuation Report</h2>
+        <div style="margin-top:24px;display:flex;justify-content:center;gap:40px;font-size:13px;color:rgba(255,255,255,.6)">
+            <div>小区：{community}</div><div>区域：{district}</div><div>面积：{area}㎡</div><div>报价：{asking:.0f}万元</div>
+        </div>
+        <div style="margin-top:16px;font-size:12px;color:rgba(255,255,255,.35)">{today}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ═══════════ 页码1：最终结论 ═══════════
+    level = result["valuation_level"]
+    margin = result["safety_margin"]
+    icon = result["level_icon"]
+    model = result["final_model_value"]
+    atype = result["asset_name"]
+    nego = result["predicted_negotiation_range"]
+
+    # 是否值得买
+    if "明显低估" in level: buy_advice, buy_tag = "建议重点关注", "green"
+    elif "略低估" in level: buy_advice, buy_tag = "可以考虑但需适当压价", "green"
+    elif "价格合理" in level: buy_advice, buy_tag = "可按市场价正常推进", "blue"
+    elif "略高估" in level: buy_advice, buy_tag = "谨慎购买，建议大幅议价", "amber"
+    elif "明显高估" in level and atype == "高风险型":
+        buy_advice, buy_tag = "仅适合高风险投资者", "red"
+    else: buy_advice, buy_tag = "不建议当前价格买入", "red"
+
+    safe_buy = round(asking * (1 - nego[1]), 0)
+    fair_buy = round(result["estimated_final_transaction_price"], 0)
+    aggressive_buy = round(asking * (1 - nego[0]), 0)
+
+    concl_cls = "undervalued" if "低估" in level else ("overvalued" if "高估" in level else "")
+
+    # 生成一句话最终建议
+    final_one_liner = _generate_final_one_liner(result, p)
+
+    st.markdown(f"""
+    <div class="rpt-page">
+        <h3>一、最终结论</h3>
+        <div class="rpt-sub">Executive Summary</div>
+        <div class="rpt-metric-row">
+            <div class="rpt-metric"><div class="val">{icon}</div><div class="lbl">估值状态</div></div>
+            <div class="rpt-metric"><div class="val">{level}</div><div class="lbl">估值结论</div></div>
+            <div class="rpt-metric"><div class="val"><span class="rpt-tag {buy_tag}">{buy_advice}</span></div><div class="lbl">购买建议</div></div>
+            <div class="rpt-metric"><div class="val">{margin:+.1%}</div><div class="lbl">安全边际</div></div>
+        </div>
+        <div class="rpt-divider"></div>
+        <div class="rpt-conclusion {concl_cls}">
+            <div class="c-title">📋 最终评估意见</div>
+            <div class="c-body">{final_one_liner}</div>
+        </div>
+        <div class="rpt-divider"></div>
+        <div class="rpt-metric-row">
+            <div class="rpt-metric"><div class="val">{safe_buy:.0f}万</div><div class="lbl">安全买入价</div></div>
+            <div class="rpt-metric"><div class="val">{fair_buy:.0f}万</div><div class="lbl">合理买入价</div></div>
+            <div class="rpt-metric"><div class="val">{aggressive_buy:.0f}万</div><div class="lbl">激进买入价</div></div>
+            <div class="rpt-metric"><div class="val">{asking:.0f}万</div><div class="lbl">当前挂牌价</div></div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ═══════════ 页码2：估值分析 ═══════════
+    st.markdown(f"""
+    <div class="rpt-page">
+        <h3>二、估值分析</h3>
+        <div class="rpt-sub">Valuation Analysis</div>
+        <div class="rpt-metric-row">
+            <div class="rpt-metric"><div class="lbl">挂牌价</div><div class="val">{asking:.0f}万</div></div>
+            <div class="rpt-metric"><div class="lbl">模型估值</div><div class="val">{model:.0f}万</div></div>
+            <div class="rpt-metric"><div class="lbl">预测成交价</div><div class="val">{result['estimated_final_transaction_price']:.0f}万</div></div>
+            <div class="rpt-metric"><div class="lbl">安全边际</div><div class="val">{margin:+.1%}</div></div>
+        </div>
+        <div class="rpt-divider"></div>
+        <p style="font-size:13px;color:#64748B;line-height:1.7;">
+            <b>模型估值</b>：基于小区参考均价，叠加朝向、楼层、装修、景观、噪音、采光、学区等{len(result.get('core_details',[]))+len(result.get('macro_details',[]))}项因子调整后的合理估值。代表该房源在当前市场条件下的<b>理论公允价值</b>。<br><br>
+            <b>预测成交价</b>：在模型估值基础上，考虑资产类型（{atype}）的流动性特征、当前议价空间（{nego[0]:.0%}~{nego[1]:.0%}）后，预测的<b>最可能实际成交水平</b>。两者差异反映了市场情绪、买卖双方博弈、低总价稀缺性等非量化因素。
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ═══════════ 页码3：核心影响因子 ═══════════
+    all_adj = result.get("core_details", []) + result.get("macro_details", []) + result.get("liquidity_details", [])
+    pos = sorted([d for d in all_adj if d["adjustment"] > 0.002], key=lambda x: -x["adjustment"])[:5]
+    neg = sorted([d for d in all_adj if d["adjustment"] < -0.002], key=lambda x: x["adjustment"])[:5]
+
+    st.markdown(f'<div class="rpt-page"><h3>三、核心影响因子</h3><div class="rpt-sub">Key Valuation Factors</div>', unsafe_allow_html=True)
+    st.markdown('<table class="rpt-table"><tr><th>因子</th><th>影响</th><th>说明</th></tr>', unsafe_allow_html=True)
+    for d in pos + neg:
+        sign = "+" if d["adjustment"] >= 0 else ""
+        color = "#059669" if d["adjustment"] >= 0 else "#DC2626"
+        explain = _humanize_factor(d["factor_name"], d.get("value", ""), d["adjustment"])
+        st.markdown(f'<tr><td>{d["factor_name"]}</td><td style="color:{color};font-weight:600">{sign}{d["adjustment"]:.0%}</td><td>{explain}</td></tr>', unsafe_allow_html=True)
+    st.markdown('</table></div>', unsafe_allow_html=True)
+
+    # ═══════════ 页码4：投资测算 ═══════════
+    irr_val, roi_val, cash_val, payback_val = "—", "—", "—", "—"
+    try:
+        from calculations import calc_professional_metrics, calc_hold_cash, calc_sell_profit, calc_buy_cost
+        from calculations import get_school_premium, get_amenity_premium, get_defect_discount
+        tp = asking * 10000; area_i = area; hy = st.session_state.get("hold_years", 10)
+        rent = st.session_state.get("monthly_rent", 5000)
+        input_money = tp * 0.35
+        monthly_mortgage = 0
+        if st.session_state.get("loan_type", "不贷款") != "不贷款":
+            monthly_mortgage = tp * st.session_state.get("loan_ratio", 65) / 100 * 0.004
+        sp = get_school_premium(st.session_state.get("is_school", False), st.session_state.get("school_level", "普通学区"),
+                                "多校划片(中等概率)", "小学")
+        ap = get_amenity_premium(st.session_state.get("subway_distance", "1公里内"),
+                                st.session_state.get("hospital_distance", "1公里内"),
+                                st.session_state.get("mall_distance", "2公里内"))
+        dd = get_defect_discount(st.session_state.get("orientation_defect", "无"),
+                                st.session_state.get("layout_defect", "无"),
+                                st.session_state.get("building_defect", "无"),
+                                st.session_state.get("hard_defect", "无"))
+        cflows = []
+        for y in range(hy):
+            h = calc_hold_cash(area_i, st.session_state.get("property_fee_month", 6.0),
+                              st.session_state.get("heat_fee_year", 30.0),
+                              st.session_state.get("repair_year", 5000),
+                              rent, st.session_state.get("vacancy_rate", 5),
+                              monthly_mortgage, st.session_state.get("rent_growth", 2.0), y)
+            cflows.append(h["年净现金流"])
+        sell_res = calc_sell_profit(tp, hy, st.session_state.get("price_growth", 3.0), 0,
+                                    st.session_state.get("sell_agent_rate", 0.02),
+                                    True, False, input_money, sp, ap, dd)
+        profit = sell_res["总净利润"]
+        first_noi = cflows[0] + monthly_mortgage * 12 if cflows else 0
+        m = calc_professional_metrics(input_money, profit, cflows, hy, rent, tp, first_noi, monthly_mortgage)
+        irr_val = f"{m['IRR年化收益率']}%"
+        roi_val = f"{m['年化ROI']}%"
+        cash_val = f"{cflows[0]//12:.0f}元/月" if cflows else "—"
+        payback_val = f"{m['静态回本周期(年)']}年"
+    except Exception:
+        pass
+
+    invest_suit = _investment_suitability(result, p)
+
+    st.markdown(f"""
+    <div class="rpt-page">
+        <h3>四、投资测算</h3>
+        <div class="rpt-sub">Investment Analysis</div>
+        <div class="rpt-metric-row">
+            <div class="rpt-metric"><div class="val">{irr_val}</div><div class="lbl">IRR 年化收益率</div></div>
+            <div class="rpt-metric"><div class="val">{roi_val}</div><div class="lbl">ROI</div></div>
+            <div class="rpt-metric"><div class="val">{cash_val}</div><div class="lbl">月净现金流</div></div>
+            <div class="rpt-metric"><div class="val">{payback_val}</div><div class="lbl">回本周期</div></div>
+        </div>
+        <div class="rpt-divider"></div>
+        <p style="font-size:13px;color:#475569;line-height:1.7;">
+            <b>投资适配</b>：{invest_suit}
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ═══════════ 页码5：风险分析 ═══════════
+    risks = _collect_structured_risks(result, p)
+    st.markdown(f'<div class="rpt-page"><h3>五、风险分析</h3><div class="rpt-sub">Risk Assessment</div>', unsafe_allow_html=True)
+    st.markdown('<table class="rpt-table"><tr><th>风险项</th><th>等级</th><th>说明</th></tr>', unsafe_allow_html=True)
+    for r in risks:
+        emoji = "🔴" if r["level"] == "高" else "🟡" if r["level"] == "中" else "🟢"
+        st.markdown(f'<tr><td>{r["name"]}</td><td>{emoji} {r["level"]}</td><td>{r["detail"]}</td></tr>', unsafe_allow_html=True)
+    st.markdown('</table></div>', unsafe_allow_html=True)
+
+    # ═══════════ 页码6：压力测试 ═══════════
+    stress_data = []
+    try:
+        from calculations import stress_test as stest, calc_hold_cash, calc_sell_profit, calc_professional_metrics
+        from calculations import get_school_premium, get_amenity_premium, get_defect_discount
+        tp2 = asking * 10000; area2 = area; hy2 = st.session_state.get("hold_years", 10)
+        rent2 = st.session_state.get("monthly_rent", 5000)
+        input_m2 = tp2 * 0.35
+        mm2 = 0
+        if st.session_state.get("loan_type", "不贷款") != "不贷款":
+            mm2 = tp2 * st.session_state.get("loan_ratio", 65) / 100 * 0.004
+        sp2 = get_school_premium(st.session_state.get("is_school", False), st.session_state.get("school_level", "普通学区"), "多校划片(中等概率)", "小学")
+        ap2 = get_amenity_premium(st.session_state.get("subway_distance", "1公里内"), st.session_state.get("hospital_distance", "1公里内"), st.session_state.get("mall_distance", "2公里内"))
+        dd2 = get_defect_discount(st.session_state.get("orientation_defect", "无"), st.session_state.get("layout_defect", "无"), st.session_state.get("building_defect", "无"), st.session_state.get("hard_defect", "无"))
+        sres = stest(tp2, hy2, mm2, input_m2, rent2, area2, st.session_state.get("property_fee_month", 6.0),
+                     st.session_state.get("heat_fee_year", 30.0), st.session_state.get("repair_year", 5000),
+                     st.session_state.get("vacancy_rate", 5), st.session_state.get("price_growth", 3.0),
+                     st.session_state.get("rent_growth", 2.0), sp2, ap2, dd2)
+        for _, row in sres.iterrows():
+            stress_data.append({"场景": row["场景"], "IRR": f"{row['IRR(%)']}%", "净利润": f"{row['总净利润(万)']}万"})
+    except Exception:
+        stress_data = [{"场景": "数据不足", "IRR": "—", "净利润": "—"}]
+
+    st.markdown(f'<div class="rpt-page"><h3>六、压力测试</h3><div class="rpt-sub">Stress Test Scenarios</div>', unsafe_allow_html=True)
+    st.markdown('<table class="rpt-table"><tr><th>场景</th><th>IRR</th><th>净利润</th></tr>', unsafe_allow_html=True)
+    for s in stress_data:
+        st.markdown(f'<tr><td>{s["场景"]}</td><td>{s["IRR"]}</td><td>{s["净利润"]}</td></tr>', unsafe_allow_html=True)
+    st.markdown('</table></div>', unsafe_allow_html=True)
+
+    # ═══════════ 页码7：适合人群 ═══════════
+    buyers = _collect_structured_buyers(result, p)
+    st.markdown(f'<div class="rpt-page"><h3>七、适合人群</h3><div class="rpt-sub">Target Audience</div>', unsafe_allow_html=True)
+    for b in buyers:
+        icon_b = "✅" if b["suitable"] else "⚠️"
+        st.markdown(f'<p style="font-size:14px;padding:4px 0">{icon_b} <b>{b["type"]}</b>：{b["reason"]}</p>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # ═══════════ 页码8：免责声明 ═══════════
+    st.markdown(f"""
+    <div class="rpt-page" style="background:#F8FAFC;">
+        <h3>八、免责声明</h3>
+        <div class="rpt-sub">Disclaimer</div>
+        <p style="font-size:12px;color:#94A3B8;line-height:1.8;">
+            本报告基于用户输入数据、看房AI Book估值模型规则及现有市场参数生成，仅作为购房决策参考，不构成法律、金融、贷款或交易承诺。实际交易价格需结合房源真实性、产权情况、银行政策及市场成交情况综合判断。报告中的预测成交价、安全边际、建议买入价等均为模型估算，不代表未来实际成交水平。投资有风险，入市需谨慎。
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # 底部
+    st.markdown(f"""
+    <div class="rpt-footer">
+        © 看房AI Book Research | Beijing Property Intelligence<br>
+        报告生成时间：{today} | 仅供内部决策参考
+    </div>
+    """, unsafe_allow_html=True)
+
+
+# ═══ 报告辅助函数 ═══
+
+def _generate_final_one_liner(result, p):
+    """生成一句话最终建议"""
+    level = result["valuation_level"]
+    margin = result["safety_margin"]
+    atype = result["asset_name"]
+    nego = result["predicted_negotiation_range"]
+    age = p.get("house_age", 5)
+    hard = p.get("hard_defect", "无")
+    prop = p.get("property_type", "商品房")
+    lq = result["liquidity_score"]
+
+    if "明显高估" in level:
+        if hard != "无":
+            return f"该房源当前挂牌价明显高于模型合理估值，主要风险来自{hard}带来的心理折价与未来转手压力。若不能取得明显折价（至少{abs(margin):.0%}），不建议普通自住客户购买。"
+        elif lq < 40:
+            return f"该房源报价偏高，且流动性评分仅{lq}/100，未来转手困难。以当前价格买入将面临较大的资产缩水风险。建议大幅压价或果断放弃。"
+        else:
+            return f"该房源当前报价高于模型估值约{abs(margin):.0%}，安全边际不足。建议以{nego[0]:.0%}~{nego[1]:.0%}幅度进行议价，如卖家不松动则不建议追高。"
+    elif "明显低估" in level:
+        return f"该房源当前报价低于模型合理估值约{abs(margin):.0%}，存在一定的安全边际。从估值角度看具备较好的性价比，建议实地确认房屋状况后考虑入手。"
+    elif "略低估" in level:
+        return f"报价略低于模型估值，有一定性价比。建议在{nego[0]:.0%}~{nego[1]:.0%}的议价空间内推进交易。"
+    elif "略高估" in level:
+        return f"价格略高于模型估值约{abs(margin):.0%}，不算离谱但也不便宜。建议以{nego[0]:.0%}~{nego[1]:.0%}幅度议价，争取接近合理估值水平成交。"
+    else:
+        return f"报价与模型估值基本吻合（偏差{abs(margin):.0%}），卖方定价合理。建议按市场价正常推进交易，无需过度纠结价格。"
+
+
+def _investment_suitability(result, p):
+    """投资适配"""
+    atype = result["asset_name"]
+    margin = result["safety_margin"]
+    lq = result["liquidity_score"]
+    if atype == "豪宅型" or atype == "别墅型":
+        return "更适合自住享受+长期资产配置，不适合短线投资或追求高流动性。"
+    if atype == "高风险型":
+        return "仅适合对市场有深刻理解、愿意承担高风险的高阶投资者，不建议普通家庭作为首套房。"
+    if margin > 0.05 and lq >= 50:
+        return "具备一定的安全边际和流动性，适合自住兼保值。如有投资需求，可作为稳健型标的。"
+    if lq >= 60:
+        return "流动性好，适合追求快速周转的投资者。自住和投资均可兼顾。"
+    return "更适合自住刚需，投资回报需结合长期持有预期判断。"
+
+
+def _collect_structured_risks(result, p):
+    """结构化风险列表"""
+    risks = []
+    level = result["valuation_level"]
+    atype = result["asset_name"]
+    age = p.get("house_age", 5)
+    school = p.get("school_level", "普通学区")
+    hard = p.get("hard_defect", "无")
+    lq = result["liquidity_score"]
+    prop = p.get("property_type", "商品房")
+    asking = result["asking_price"]
+
+    if "高估" in level:
+        risks.append({"name": "价格风险", "level": "高", "detail": f"当前报价偏高，安全边际{result['safety_margin']:+.1%}，以当前价格买入存在一定的资产缩水风险。"})
+    else:
+        risks.append({"name": "价格风险", "level": "低", "detail": "当前报价在合理区间内，价格风险可控。"})
+
+    if lq < 40:
+        risks.append({"name": "流动性风险", "level": "高", "detail": f"流动性评分{lq}/100，买家池窄、变现周期长。如需快速出手，可能需要大幅折价。"})
+    elif lq < 60:
+        risks.append({"name": "流动性风险", "level": "中", "detail": f"流动性评分{lq}/100，正常市场条件下可以成交，但周期可能偏长。"})
+    else:
+        risks.append({"name": "流动性风险", "level": "低", "detail": "流动性良好，市场接受度高。"})
+
+    if age >= 25:
+        risks.append({"name": "房龄风险", "level": "高", detail=f"房龄{age}年，部分银行可能拒贷或缩短贷款年限，管线老化维修成本不可忽视。"})
+    elif age >= 15:
+        risks.append({"name": "房龄风险", "level": "中", "detail": f"房龄{age}年，贷款年限和利率可能受限，建议提前咨询银行。"})
+    else:
+        risks.append({"name": "房龄风险", "level": "低", "detail": "房龄较新，贷款无虞。"})
+
+    if school in ["顶尖名校", "市重点"]:
+        risks.append({"name": "学区政策风险", "level": "中", "detail": "顶级学区房享受较高溢价，但多校划片、学位名额调整等政策变化可能导致学区价值缩水。"})
+
+    if hard != "无":
+        risks.append({"name": "硬伤风险", "level": "高", "detail": f"存在{hard}问题，市场对此类房源存在系统性折价，未来转手难度显著增加。"})
+
+    if prop in ["回迁房", "经济适用房", "商住两用"]:
+        risks.append({"name": "产权风险", "level": "高", "detail": f"{prop}存在贷款受限、税费偏高、交易周期长等固有问题。"})
+
+    risks.append({"name": "转手风险", "level": "中" if lq < 60 else "低",
+                     "detail": f"作为{atype}，{'接盘能力偏弱，转手周期可能偏长' if lq < 60 else '市场接受度尚可，正常条件下可以转手'}。"})
+    return risks
+
+
+def _collect_structured_buyers(result, p):
+    """结构化适合人群"""
+    atype = result["asset_name"]
+    level = result["valuation_level"]
+    lq = result["liquidity_score"]
+    margin = result["safety_margin"]
+
+    return [
+        {"type": "自住客户", "suitable": "明显高估" not in level,
+         "reason": "当前报价在可接受范围内，适合以居住为主要目的的买家。" if "明显高估" not in level else "报价偏高，自住客户不建议在当前位置追高。"},
+        {"type": "投资客户", "suitable": margin > -0.05 and lq >= 40,
+         "reason": "有一定的安全边际和流动性支撑，适合作为投资标的。" if margin > -0.05 and lq >= 40 else "当前条件对投资者不够友好。"},
+        {"type": "收租客户", "suitable": True,
+         "reason": "北京住宅租金稳定，长期持有收租逻辑成立。但需注意租售比偏低是核心城市共性。"},
+        {"type": "保值客户", "suitable": atype not in ["高风险型"],
+         "reason": "核心地段+优质资产长期保值能力较强。" if atype not in ["高风险型"] else "该类资产波动性较大，保值能力不确定。"},
+        {"type": "高风险博弈", "suitable": atype == "高风险型",
+         "reason": "高风险资产需要专业的尽调能力和承受力，仅适合高阶玩家。" if atype == "高风险型" else "该资产风险可控，不需要博弈思维。"},
+    ]
 
 
 # ═══════════ Tab F: 高级模式 ═══════════
