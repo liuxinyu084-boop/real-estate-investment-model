@@ -73,6 +73,16 @@ is_client = mode == "🏠 客户评估模式"
 
 if is_client:
 
+    # ═══ 安全页面切换：pending 机制 ═══
+    if "_pending_client_page" in st.session_state:
+        st.session_state["client_active_page"] = st.session_state["_pending_client_page"]
+        del st.session_state["_pending_client_page"]
+    # 保证默认值有效
+    if st.session_state.get("client_active_page") not in [
+        "📝 房源输入", "📋 总览结论", "🧠 估值分析", "📈 投资测算", "⚠️ 风险分析", "📄 专业报告"
+    ]:
+        st.session_state["client_active_page"] = "📝 房源输入"
+
     with st.sidebar:
         st.caption("👤 当前：客户评估模式")
     params = render_sidebar_v2()
@@ -97,7 +107,7 @@ if is_client:
         if st.button("📊 生成评估报告", type="primary", use_container_width=True, key="gen_report_btn"):
             st.session_state["report_generated"] = True
             st.session_state["report_generated_at"] = datetime.now().strftime("%m-%d %H:%M")
-            st.session_state["client_active_tab"] = "📋 总览结论"
+            st.session_state["_pending_client_page"] = "📋 总览结论"
             st.success("✅ 评估报告已生成，正在跳转到总览结论...")
             time.sleep(0.5)
             st.rerun()
@@ -124,7 +134,7 @@ if is_client:
     # 客户标签页（radio 控制切换）
     tab_options = ["📝 房源输入", "📋 总览结论", "🧠 估值分析", "📈 投资测算", "⚠️ 风险分析", "📄 专业报告"]
     active_tab = st.radio("导航", tab_options, horizontal=True, label_visibility="collapsed",
-                          key="client_active_tab")
+                          key="client_active_page")
 
     # 快捷导航按钮
     report_generated = st.session_state.get("report_generated", False)
@@ -132,11 +142,11 @@ if is_client:
         col_nav1, col_nav2 = st.columns(2)
         with col_nav1:
             if st.button("🔙 返回修改房源", use_container_width=True, key="nav_back_input"):
-                st.session_state["client_active_tab"] = "📝 房源输入"
+                st.session_state["_pending_client_page"] = "📝 房源输入"
                 st.rerun()
         with col_nav2:
             if st.button("📄 查看专业报告", use_container_width=True, key="nav_to_report"):
-                st.session_state["client_active_tab"] = "📄 专业报告"
+                st.session_state["_pending_client_page"] = "📄 专业报告"
                 st.rerun()
 
     if active_tab == "📝 房源输入":
