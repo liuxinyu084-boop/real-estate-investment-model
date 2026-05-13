@@ -1379,8 +1379,7 @@ def _get_val_params():
 
 
 def render_sidebar_v2():
-    """V6 重构侧边栏——统一输入"""
-    st.sidebar.title("🏠 房源参数")
+    """V7 精简侧边栏——仅管理功能，不创建输入控件"""
     init_saves()
 
     # ═══ 延迟加载：在 widget 创建前恢复已保存房源 ═══
@@ -1390,94 +1389,32 @@ def render_sidebar_v2():
             st.session_state[k] = v
         del st.session_state["_pending_load_house"]
 
-    with st.sidebar.expander("📋 基础信息", expanded=True):
-        st.text_input("小区名称", key="community")
-        st.selectbox("行政区", ["东城","西城","朝阳","海淀","丰台","石景山","通州","昌平","顺义","大兴","房山","其他"], key="district")
-        col_a1, col_a2 = st.columns(2)
-        col_a1.number_input("总价(万元)", 50, 5000, 500, key="total_price")
-        col_a2.number_input("面积(㎡)", 20, 500, 90, key="area")
-        st.number_input("房龄(年)", 0, 70, 5, key="house_age")
-        col_h1, col_h2 = st.columns(2)
-        col_h1.selectbox("户型", ["1室1厅","2室1厅","2室2厅","3室1厅","3室2厅","4室及以上"], key="house_type_layout")
-        col_h2.selectbox("楼层", ["低楼层","中楼层","高楼层","顶层"], key="floor_type")
-        st.selectbox("房产属性", ["商品房","已购公房","回迁房","经济适用房","商住两用"], key="property_type")
-        st.checkbox("满二", True, key="is_full2")
-        st.checkbox("满五唯一", False, key="is_full5_only")
-
-    with st.sidebar.expander("💰 贷款参数", expanded=False):
-        st.selectbox("贷款类型", ["不贷款","纯商业贷款","公积金+商业组合"], key="loan_type")
-        if st.session_state.get("loan_type", "不贷款") != "不贷款":
-            st.checkbox("首套房", True, key="is_first")
-            st.slider("贷款比例(%)", 0, 85, 65, 5, key="loan_ratio")
-            st.slider("贷款年限", 5, 30, 30, key="loan_years")
-            st.selectbox("还款方式", ["等额本息","等额本金"], key="repay_type")
-            if st.session_state.get("loan_type") == "纯商业贷款":
-                st.number_input("商贷利率(%)", 2.5, 8.0, 3.8, key="loan_rate")
-            if st.session_state.get("loan_type") == "公积金+商业组合":
-                st.number_input("公积金额度(万元)", 0, 200, 0, 10, key="gjj_amount")
-                st.number_input("公积金利率(%)", 2.5, 5.0, 3.1, key="gjj_rate")
-                st.number_input("商贷利率(%)", 2.5, 8.0, 3.8, key="bank_rate")
-
-    with st.sidebar.expander("💵 租金/持有", expanded=False):
-        st.number_input("月租金(元)", 500, 100000, 5000, key="monthly_rent")
-        st.slider("空置率(%)", 0, 50, 5, key="vacancy_rate")
-        st.number_input("物业费(元/㎡/月)", 0.5, 30.0, 6.0, key="property_fee_month")
-        st.number_input("供暖费(元/㎡/年)", 15.0, 60.0, 30.0, key="heat_fee_year")
-        st.number_input("年维修费(元)", 0, 50000, 5000, key="repair_year")
-        col_f1, col_f2 = st.columns(2)
-        col_f1.number_input("买家费率", 0.01, 0.05, 0.02, key="buy_agent_rate")
-        col_f2.number_input("卖家费率", 0.01, 0.03, 0.02, key="sell_agent_rate")
-        st.number_input("装修费(元)", 0, 1000000, 0, key="decorate_fee")
-        st.number_input("家具家电(元)", 0, 500000, 0, key="furniture_fee")
-
-    with st.sidebar.expander("🔍 微观参数", expanded=False):
-        st.selectbox("朝向缺陷", ["无","东西向","北向","西北/东北"], key="orientation_defect")
-        st.selectbox("户型缺陷", ["无","暗卫","暗厅","过道长","异形","无阳台"], key="layout_defect")
-        st.selectbox("楼栋缺陷", ["无","低楼层遮挡","顶层漏水","西晒","临街","高架/铁路","垃圾站旁"], key="building_defect")
-        st.selectbox("硬伤", ["无","有抵押","有查封","共有产权","商住两用","凶宅/非正常死亡"], key="hard_defect")
-        st.selectbox("装修程度", ["豪装","精装","简装","毛坯"], key="decoration_level")
-        st.selectbox("物业水平", ["顶级","优质","普通","较差"], key="property_level")
-        st.selectbox("车位配比", ["1:2以上","1:1.5","1:1","1:0.8","1:0.5以下"], key="parking_ratio")
-        st.checkbox("学区房", False, key="is_school")
-        if st.session_state.get("is_school"):
-            st.selectbox("学区等级", ["普通学区","区重点","市重点","顶尖名校"], key="school_level")
-        st.selectbox("地铁距离", ["500米内","1公里内","2公里内","2公里外"], key="subway_distance")
-        st.selectbox("商场距离", ["1公里内","2公里内","2公里外"], key="mall_distance")
-        st.selectbox("医院距离", ["1公里内","2公里内","2公里外"], key="hospital_distance")
-        st.number_input("绿化率(%)", 0, 80, 30, key="green_rate")
-        st.number_input("容积率", 0.1, 5.0, 2.5, key="volume_rate")
-
-    with st.sidebar.expander("📈 持有假设", expanded=False):
-        st.number_input("持有年限", 1, 50, 10, key="hold_years")
-        st.number_input("房价年涨幅(%)", -10.0, 15.0, 3.0, key="price_growth")
-        st.number_input("租金年涨幅(%)", -5.0, 10.0, 2.0, key="rent_growth")
-        st.number_input("人口增长(%)", -5.0, 10.0, 1.0, key="population_growth")
-        st.number_input("GDP增长(%)", -5.0, 15.0, 5.2, key="gdp_growth")
-        st.number_input("区域空置(%)", 0, 50, 5, key="regional_vacancy")
-
     # 房源管理
-    st.sidebar.divider()
     st.sidebar.subheader("📂 房源管理")
     house_list = list(st.session_state.house_saves.keys())
+
     if house_list:
-        col_s1, col_s2 = st.sidebar.columns([3, 1])
-        selected = col_s1.selectbox("已保存", [""] + house_list, key="saved_house_selector", label_visibility="collapsed")
-        if selected and col_s2.button("📂", key="sidebar_load_btn"):
-            # 延迟加载：保存到 pending，rerun 后在 widget 创建前应用
+        selected = st.sidebar.selectbox("已保存", [""] + house_list, key="saved_house_selector")
+        col_act1, col_act2 = st.sidebar.columns(2)
+        if selected and col_act1.button("📂 加载", key="sidebar_load_btn", use_container_width=True):
             if selected in st.session_state.house_saves:
                 st.session_state["_pending_load_house"] = dict(st.session_state.house_saves[selected])
                 st.rerun()
-            st.sidebar.success(msg)
-    col_save1, col_save2 = st.sidebar.columns(2)
-    save_name = col_save1.text_input("名称", key="sidebar_save_name", placeholder="保存为...")
-    if col_save2.button("💾", key="sidebar_save_btn") and save_name:
+        if selected and col_act2.button("🗑 删除", key="sidebar_delete_btn", use_container_width=True):
+            delete_house(selected)
+            st.rerun()
+    else:
+        st.sidebar.caption("暂无已保存房源")
+
+    st.sidebar.divider()
+    col_sv1, col_sv2 = st.sidebar.columns(2)
+    save_name = col_sv1.text_input("名称", key="sidebar_save_name", placeholder="保存为...")
+    if col_sv2.button("💾 保存", key="sidebar_save_btn", use_container_width=True) and save_name:
         msg = save_current_house(save_name)
         st.sidebar.success(msg)
 
+    st.sidebar.caption("💡 输入字段请在「📝 房源输入」标签页填写")
     return {}
-
-
-# ═══════════ Tab A: 总览结论 ═══════════
 
 def render_tab_overview(params):
     """总览结论——客户第一眼决策页"""
