@@ -1470,7 +1470,7 @@ def render_sidebar_v2():
 # ═══════════ Tab A: 总览结论 ═══════════
 
 def render_tab_overview(params):
-    """总览——AI结论 + 估值卡片 + 建议 + 3价"""
+    """总览结论——客户第一眼决策页"""
     from valuation import calculate_property_valuation
     from dataset_analysis import compute_confidence_score
     from transaction_dataset import load_dataset
@@ -1478,40 +1478,144 @@ def render_tab_overview(params):
 
     p = _get_val_params()
     result = calculate_property_valuation(p)
-    ds = load_dataset() if os.path.exists("transaction_dataset.json") else []
-    conf = compute_confidence_score(ds, result.get("asset_type")) if ds else {"grade": "C"}
 
-    # 顾问结论
-    _render_advisor_conclusion(result, conf, p)
+    model = result["final_model_value"]
+    asking = result["asking_price"]
+    level = result["valuation_level"]
+    margin = result["safety_margin"]
+    icon = result["level_icon"]
+    atype = result["asset_name"]
+    nego = result["predicted_negotiation_range"]
+    hard_defect = p.get("hard_defect", "无")
+
+    # ═══════════ 1. 最终决策卡片 ═══════════
+    if "明显低估" in level:
+        buy_advice, bg_color = "建议重点关注", "#ECFDF5"
+        action = "可重点跟进"
+    elif "略低估" in level:
+        buy_advice, bg_color = "可以考虑但需压价", "#F0FDF4"
+        action = "继续谈判"
+    elif "价格合理" in level:
+        buy_advice, bg_color = "可按市场价推进", "#F0F7FF"
+        action = "正常推进"
+    elif "略高估" in level:
+        buy_advice, bg_color = "谨慎购买", "#FFFBEB"
+        action = "明显压价"
+    elif "明显高估" in level and atype == "高风险型":
+        buy_advice, bg_color = "仅适合高风险投资者", "#FEF2F2"
+        action = "仅适合专业投资者低价博弈"
+    else:
+        buy_advice, bg_color = "不建议当前价格买入", "#FEF2F2"
+        action = "暂缓购买"
+
+    # 建议买入价（基于模型估值）
+    is_highrisk = (atype == "高风险型" or hard_defect in ["凶宅/非正常死亡", "有查封", "共有产权", "商住两用"])
+    if is_highrisk:
+        safe_buy = round(model * 0.85, 0)
+        fair_buy = round(model * 0.95, 0)
+        aggressive_buy = round(model * 1.00, 0)
+    else:
+        safe_buy = round(model * 0.90, 0)
+        fair_buy = round(model * 0.98, 0)
+        aggressive_buy = round(model * 1.05, 0)
+
+    # 一句话建议
+    final_line = _generate_final_one_liner(result, p)
+
+    st.markdown(f"""
+    <div style="background:{bg_color};border:2px solid #2563EB;border-radius:14px;padding:28px;margin:12px 0">
+        <div style="display:flex;align-items:center;gap:20px;margin-bottom:16px">
+            <div style="font-size:56px">{icon}</div>
+            <div>
+                <div style="font-size:26px;font-weight:800;color:#0F172A">{level}</div>
+                <div style="font-size:16px;color:#475569;margin-top:4px">
+                    建议：<b>{buy_advice}</b>　｜　操作：<b>{action}</b>
+                </div>
+            </div>
+        </div>
+        <div style="background:#fff;border-radius:8px;padding:16px;font-size:15px;color:#334155;line-height:1.8">
+            {final_line}
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ═══════════ 2. 建议买入区间 ═══════════
+    st.subheader("💰 建议买入区间")
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("安全买入价", f"{safe_buy:.0f}万")
+    c2.metric("合理买入价", f"{fair_buy:.0f}万")
+    c3.metric("激进买入价", f"{aggressive_buy:.0f}万")
+    c4.metric("模型估值", f"{model:.0f}万", delta=f"{margin:+.1%}")
+    c5.metric("当前报价", f"{asking:.0f}万")
+    st.caption(f"建议买入区间：{safe_buy:.0f}万 ~ {aggressive_buy:.0f}万（基于模型估值 {model:.0f} 万）")
 
     st.divider()
 
-    # 估值结论卡片
-    icon = result["level_icon"]; level = result["valuation_level"]
-    bg = "#ECFDF5" if "低估" in level else "#FEF2F2" if "高估" in level else "#F0F7FF"
-    st.markdown(f"""<div style="background:{bg};border-radius:12px;padding:20px;text-align:center;margin:10px 0">
-        <div style="font-size:48px">{icon}</div>
-        <div style="font-size:28px;font-weight:800;color:#1E293B">{level}</div>
-        <div style="font-size:14px;color:#64748B;margin-top:8px">{result['asset_name']} · 可信度 {conf['grade']} 级</div>
-    </div>""", unsafe_allow_html=True)
+    # ═══════════ 3. 最大优势 / 最大风险 ═══════════
+    all_adj = result.get("core_details", []) + result.get("macro_details", []) + result.get("liquidity_details", [])
+    pos = sorted([d for d in all_adj if d["adjustment"] > 0.003], key=lambda x: -x["adjustment"])[:2]
+    neg = sorted([d for d in all_adj if d["adjustment"] < -0.003], key=lambda x: x["adjustment"])[:2]
 
-    # 建议动作
-    st.subheader("🎯 建议动作")
-    _render_action_advice(result, p)
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.subheader("🟢 最大优势")
+        if pos:
+            for d in pos:
+                st.markdown(f"> {_humanize_factor(d['factor_name'], d.get('value',''), d['adjustment'])}")
+        else:
+            st.caption("暂无明显溢价因子")
+    with col_b:
+        st.subheader("🔴 最大风险")
+        if neg:
+            for d in neg:
+                st.markdown(f"> {_humanize_factor(d['factor_name'], d.get('value',''), d['adjustment'])}")
+        else:
+            st.caption("暂无明显折价因子")
 
-    # 三价
-    st.subheader("💰 三价对比")
-    c1, c2, c3 = st.columns(3)
-    c1.metric("挂牌价", f"{result['asking_price']:.0f}万")
-    c2.metric("模型估值", f"{result['final_model_value']:.0f}万", delta=f"{result['safety_margin']:+.1%}")
-    c3.metric("预测成交价", f"{result['estimated_final_transaction_price']:.0f}万")
-
-    # 适合人群
-    _render_suitable_buyers(result, p)
     st.divider()
-    # 风险摘要
-    st.subheader("⚠️ 核心风险")
-    _render_risk_warnings(result, p)
+
+    # ═══════════ 4. 适合人群 ═══════════
+    st.subheader("👥 适合人群")
+    buyers = _collect_structured_buyers(result, p)
+    col_s, col_n = st.columns(2)
+    with col_s:
+        for b in buyers[:3]:
+            icon_b = "✅" if b["suitable"] else "❌"
+            st.markdown(f"{icon_b} **{b['type']}**")
+    with col_n:
+        for b in buyers[3:]:
+            icon_b = "✅" if b["suitable"] else "❌"
+            st.markdown(f"{icon_b} **{b['type']}**")
+
+    st.divider()
+
+    # ═══════════ 5. 为什么这么判断 ═══════════
+    st.subheader("💡 为什么这么判断")
+    reasons = []
+    if "高估" in level:
+        reasons.append(f"当前报价高于模型估值约 {abs(margin):.0%}，站在买方角度安全边际不足。")
+    elif "低估" in level:
+        reasons.append(f"当前报价低于模型估值约 {abs(margin):.0%}，存在一定安全边际。")
+    else:
+        reasons.append("当前报价与模型估值基本吻合，买卖双方预期对等。")
+
+    if hard_defect != "无":
+        reasons.append(f"存在「{hard_defect}」标签，此类问题会显著影响未来转手时买家意愿和议价空间。")
+
+    if result["liquidity_score"] < 50:
+        reasons.append(f"该房源流动性评分 {result['liquidity_score']}/100，变现周期偏长，需做好长期持有准备。")
+
+    if atype == "高风险型":
+        reasons.append("该房源属于高风险资产类型，虽然总价可能较低，但低价不等于低风险。")
+
+    if p.get("house_age", 5) >= 20:
+        reasons.append(f"房龄 {p.get('house_age', 5)} 年，贷款年限受限，管线老化增加后期维护成本。")
+
+    for i, r in enumerate(reasons[:5]):
+        st.markdown(f"{i+1}. {r}")
+
+    st.divider()
+    st.caption("以上分析基于估值模型自动生成，仅供参考，不构成投资建议。")
 
 
 # ═══════════ Tab B: 估值分析 ═══════════
