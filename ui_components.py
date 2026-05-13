@@ -2367,636 +2367,116 @@ def render_tab_advanced(params):
 # ══════════════════════════════════════════════════════════════
 
 def render_client_input(params):
-    """客户模式——手机优先苹果式分步向导"""
+    """客户模式——快速输入 + 高级调整"""
     import time
 
-    # 模式切换（默认手机）
+    # 模式切换
     if "input_mode" not in st.session_state:
-        st.session_state["input_mode"] = "mobile"
-    mode = st.radio("方式", ["📱 简洁模式", "🖥️ 专业模式"], horizontal=True,
+        st.session_state["input_mode"] = "fast"
+    mode = st.radio("方式", ["📱 快速评估", "🖥️ 专业模式"], horizontal=True,
                     key="input_mode", label_visibility="collapsed")
-    is_mobile = mode == "📱 简洁模式"
+    is_fast = mode == "📱 快速评估"
 
-    if not is_mobile:
+    if not is_fast:
         _render_desktop_input()
         return
 
-    # ═══════════ 手机简洁模式 ═══════════
-    if "mobile_step" not in st.session_state:
-        st.session_state["mobile_step"] = 0  # 0 = 首页
+    # ═══════════ 快速评估模式 ═══════════
+    # 首次进入设置默认值
+    _ensure_defaults()
 
-    step = st.session_state["mobile_step"]
-    total = 6
+    st.markdown("""
+    <div style="text-align:center;padding:20px 10px 10px">
+        <div style="font-size:18px;font-weight:700;color:#0F172A">输入一套房，几分钟生成专业购房评估报告</div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    # ═══ 首页 ═══
-    if step == 0:
-        st.markdown("""
-        <div style="text-align:center;padding:30px 10px">
-            <div style="font-size:48px;margin-bottom:16px">🏠</div>
-            <div style="font-size:22px;font-weight:700;color:#0F172A;margin-bottom:8px">看房AI Book</div>
-            <div style="font-size:15px;color:#64748B;margin-bottom:32px;line-height:1.7">
-                帮你判断这套房<br>值不值得买
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+    # ── 核心输入区 ──
+    st.text_input("小区名称 *", placeholder="如：桃园里、阳光花园", key="community")
+    c1, c2 = st.columns(2)
+    c1.number_input("建筑面积(㎡) *", 15, 600, 90, key="area")
+    c2.number_input("当前报价(万元) *", 30, 5000, 500, key="total_price")
 
-        if st.button("开始评估 →", type="primary", use_container_width=True, key="start_wizard"):
-            st.session_state["mobile_step"] = 1
-            st.rerun()
-
-        st.caption("6 步完成评估 · 约需 2 分钟")
-        return
-
-    # 进度
-    step_titles = ["房源位置", "价格信息", "房屋情况", "投资假设", "风险因素", "确认信息"]
-    pct = step / total
-    st.progress(pct, f"步骤 {step}/{total} · {step_titles[step-1]}")
-    st.divider()
-
-    # ═══ Step 1: 房源位置 ═══
-    if step == 1:
-        st.subheader("📍 这套房在哪？")
-        st.caption("先告诉我们这套房的位置，系统会根据区域和小区建立估值基础。")
-        st.text_input("小区名称", placeholder="输入小区全称", key="community")
-        st.selectbox("行政区", ["东城","西城","朝阳","海淀","丰台","石景山","通州","昌平","顺义","大兴","房山","其他"], key="district")
-        st.number_input("建筑面积(㎡)", 20, 500, 90, key="area")
-        if st.button("下一步：价格信息 →", type="primary", use_container_width=True, key="s1"):
-            st.session_state["mobile_step"] = 2; st.rerun()
-
-    # ═══ Step 2: 价格信息 ═══
-    elif step == 2:
-        st.subheader("💰 这套房多少钱？")
-        st.caption("价格是评估的核心，我们会对比挂牌价、模型估值和预测成交价。")
-        c1, c2 = st.columns(2)
-        c1.number_input("当前报价(万元)", 50, 5000, 500, key="total_price")
-        c2.number_input("原始挂牌价(万元)", 50, 5000, 500, key="listing_price")
-        st.checkbox("已有真实成交价", False, key="has_final_price")
-        if st.session_state.get("has_final_price"):
-            st.number_input("真实成交价(万元)", 50, 5000, 500, key="final_transaction_price")
-        col_b, col_n = st.columns(2)
-        with col_b:
-            if st.button("← 上一步", use_container_width=True, key="s2b"):
-                st.session_state["mobile_step"] = 1; st.rerun()
-        with col_n:
-            if st.button("下一步：房屋情况 →", type="primary", use_container_width=True, key="s2"):
-                st.session_state["mobile_step"] = 3; st.rerun()
-
-    # ═══ Step 3: 房屋情况 ═══
-    elif step == 3:
-        st.subheader("🏠 这套房本身怎么样？")
-        st.caption("房子的硬条件决定了它在市场中的真实位置。")
-        c1, c2 = st.columns(2)
-        c1.number_input("房龄(年)", 0, 70, 5, key="house_age")
-        c2.selectbox("户型", ["1室1厅","2室1厅","2室2厅","3室1厅","3室2厅","4室及以上"], key="house_type_layout")
+    st.selectbox("贷款方式", ["不贷款","纯商业贷款","公积金+商业组合"], key="loan_type")
+    lt = st.session_state.get("loan_type", "不贷款")
+    if lt != "不贷款":
         c3, c4 = st.columns(2)
-        c3.selectbox("楼层", ["低楼层","中楼层","高楼层","顶层","底层"], key="floor_type")
-        c4.selectbox("朝向缺陷", ["无","东西向","北向","西北/东北"], key="orientation_defect")
+        c3.slider("贷款比例(%)", 0, 85, 65, 5, key="loan_ratio")
+        c4.slider("贷款年限", 5, 30, 30, key="loan_years")
+
+    # ── 报告类型 ──
+    st.divider()
+    st.caption("选择报告类型")
+    if "report_type" not in st.session_state:
+        st.session_state["report_type"] = "simple"
+    rt = st.radio("报告类型", [
+        "📱 简单版 — 30秒看懂值不值得买",
+        "📊 详细版 — 全面分析为什么好/不好",
+        "🏦 基金级 — 研究院级专业评估"
+    ], key="report_type_selector", label_visibility="collapsed",
+    index={"simple":0,"detailed":1,"fund":2}.get(st.session_state.get("report_type","simple"),0))
+    if "简单版" in rt: st.session_state["report_type"] = "simple"
+    elif "详细版" in rt: st.session_state["report_type"] = "detailed"
+    else: st.session_state["report_type"] = "fund"
+
+    # ── 高级调整（折叠）──
+    with st.expander("⚙️ 高级调整（可选）"):
+        st.caption("如果你认为系统默认值不准确，可以在这里自行修改。")
+        st.number_input("房龄(年)", 0, 70, key="house_age")
         c5, c6 = st.columns(2)
-        c5.selectbox("装修程度", ["豪装","精装","简装","毛坯"], key="decoration_level")
-        c6.selectbox("房产属性", ["商品房","已购公房","回迁房","经济适用房","商住两用"], key="property_type")
-        st.checkbox("有电梯", True, key="has_elevator")
-        col_b, col_n = st.columns(2)
-        with col_b:
-            if st.button("← 上一步", use_container_width=True, key="s3b"):
-                st.session_state["mobile_step"] = 2; st.rerun()
-        with col_n:
-            if st.button("下一步：投资假设 →", type="primary", use_container_width=True, key="s3"):
-                st.session_state["mobile_step"] = 4; st.rerun()
+        c5.selectbox("户型", ["1室1厅","2室1厅","2室2厅","3室1厅","3室2厅","4室及以上"], key="house_type_layout")
+        c6.selectbox("楼层", ["低楼层","中楼层","高楼层","顶层","底层"], key="floor_type")
+        c7, c8 = st.columns(2)
+        c7.selectbox("装修程度", ["豪装","精装","简装","毛坯"], key="decoration_level")
+        c8.selectbox("朝向缺陷", ["无","东西向","北向","西北/东北"], key="orientation_defect")
+        c9, c10 = st.columns(2)
+        c9.selectbox("学区等级", ["普通学区","区重点","市重点","顶尖名校"], key="school_level")
+        c10.selectbox("地铁距离", ["500米内","1公里内","2公里内","2公里外"], key="subway_distance")
+        c11, c12 = st.columns(2)
+        c11.number_input("月租金(元)", 0, 100000, key="monthly_rent")
+        c12.slider("空置率(%)", 0, 50, key="vacancy_rate")
+        c13, c14 = st.columns(2)
+        c13.selectbox("房产属性", ["商品房","已购公房","回迁房","经济适用房","商住两用"], key="property_type")
+        c14.selectbox("物业水平", ["顶级","优质","普通","较差"], key="property_level")
+        c15, c16 = st.columns(2)
+        c15.selectbox("硬伤", ["无","有抵押","有查封","共有产权","商住两用","凶宅/非正常死亡"], key="hard_defect")
+        c16.selectbox("车位配比", ["1:2以上","1:1.5","1:1","1:0.8","1:0.5以下"], key="parking_ratio")
+        c17, c18 = st.columns(2)
+        c17.selectbox("商场距离", ["1公里内","2公里内","2公里外"], key="mall_distance")
+        c18.selectbox("医院距离", ["1公里内","2公里内","2公里外"], key="hospital_distance")
+        c19, c20 = st.columns(2)
+        c19.selectbox("户型缺陷", ["无","暗卫","暗厅","过道长","异形","无阳台"], key="layout_defect")
+        c20.selectbox("噪音环境", ["安静","一般","严重噪音"], key="street_noise")
+        st.number_input("持有年限", 1, 50, key="hold_years")
+        st.number_input("房价年涨幅(%)", -10.0, 15.0, key="price_growth")
 
-    # ═══ Step 4: 投资假设 ═══
-    elif step == 4:
-        st.subheader("📈 你打算怎么持有？")
-        st.caption("持有方式和贷款策略直接影响投资回报测算。")
-        c1, c2 = st.columns(2)
-        c1.number_input("当前月租金(元)", 500, 100000, 5000, key="monthly_rent")
-        c2.number_input("计划持有年限", 1, 50, 10, key="hold_years")
-        st.selectbox("贷款类型", ["不贷款","纯商业贷款","公积金+商业组合"], key="loan_type")
-        lt = st.session_state.get("loan_type", "不贷款")
-        if lt != "不贷款":
-            c3, c4 = st.columns(2)
-            c3.slider("贷款比例(%)", 0, 85, 65, 5, key="loan_ratio")
-            c4.slider("贷款年限", 5, 30, 30, key="loan_years")
-
-        with st.expander("⚙️ 高级投资参数"):
-            st.slider("空置率(%)", 0, 50, 5, key="vacancy_rate")
-            st.number_input("租金年涨幅(%)", -5.0, 10.0, 2.0, key="rent_growth")
-            st.number_input("房价年涨幅(%)", -10.0, 15.0, 3.0, key="price_growth")
-            if lt == "纯商业贷款":
-                st.number_input("商贷利率(%)", 2.5, 8.0, 3.8, key="loan_rate")
-            elif lt != "不贷款":
-                c5, c6 = st.columns(2)
-                c5.number_input("公积金利率(%)", 2.5, 5.0, 3.1, key="gjj_rate")
-                c6.number_input("商贷利率(%)", 2.5, 8.0, 3.8, key="bank_rate")
-            st.selectbox("还款方式", ["等额本息","等额本金"], key="repay_type")
-            st.checkbox("首套房", True, key="is_first")
-
-        col_b, col_n = st.columns(2)
-        with col_b:
-            if st.button("← 上一步", use_container_width=True, key="s4b"):
-                st.session_state["mobile_step"] = 3; st.rerun()
-        with col_n:
-            if st.button("下一步：风险因素 →", type="primary", use_container_width=True, key="s4"):
-                st.session_state["mobile_step"] = 5; st.rerun()
-
-    # ═══ Step 5: 风险因素 ═══
-    elif step == 5:
-        st.subheader("⚠️ 这套房有没有特殊风险？")
-        st.caption("特殊因素对估值影响很大，如实填写才能得到准确评估。")
-        st.selectbox("学区等级", ["普通学区","区重点","市重点","顶尖名校"], key="school_level")
-        st.selectbox("地铁距离", ["500米内","1公里内","2公里内","2公里外"], key="subway_distance")
-        c1, c2 = st.columns(2)
-        c1.selectbox("是否有硬伤", ["无","有抵押","有查封","共有产权","商住两用","凶宅/非正常死亡"], key="hard_defect")
-        c2.selectbox("户型缺陷", ["无","暗卫","暗厅","过道长","异形","无阳台"], key="layout_defect")
-        st.selectbox("楼栋缺陷", ["无","低楼层遮挡","顶层漏水","西晒","临街","高架/铁路","垃圾站旁"], key="building_defect")
-
-        with st.expander("📍 周边配套"):
-            c3, c4 = st.columns(2)
-            c3.selectbox("商场距离", ["1公里内","2公里内","2公里外"], key="mall_distance")
-            c4.selectbox("医院距离", ["1公里内","2公里内","2公里外"], key="hospital_distance")
-            c5, c6 = st.columns(2)
-            c5.selectbox("物业水平", ["顶级","优质","普通","较差"], key="property_level")
-            c6.selectbox("车位配比", ["1:2以上","1:1.5","1:1","1:0.8","1:0.5以下"], key="parking_ratio")
-
-        col_b, col_n = st.columns(2)
-        with col_b:
-            if st.button("← 上一步", use_container_width=True, key="s5b"):
-                st.session_state["mobile_step"] = 4; st.rerun()
-        with col_n:
-            if st.button("下一步：确认信息 →", type="primary", use_container_width=True, key="s5"):
-                st.session_state["mobile_step"] = 6; st.rerun()
-
-    # ═══ Step 6: 确认生成 ═══
-    elif step == 6:
-        st.subheader("📋 确认后生成评估报告")
-
-        # 报告类型选择
-        st.caption("请选择报告类型")
-        if "report_type" not in st.session_state:
-            st.session_state["report_type"] = "simple"
-        rt = st.radio("报告类型", [
-            "📱 简单版 — 30秒看懂值不值得买",
-            "📊 详细版 — 全面分析为什么好/不好",
-            "🏦 基金级 — 研究院级专业评估报告"
-        ], key="report_type_selector", label_visibility="collapsed",
-        index={"simple":0,"detailed":1,"fund":2}.get(st.session_state.get("report_type","simple"),0))
-        # Map selected label back
-        if "简单版" in rt: st.session_state["report_type"] = "simple"
-        elif "详细版" in rt: st.session_state["report_type"] = "detailed"
-        else: st.session_state["report_type"] = "fund"
-
-        st.divider()
-        # ...rest of confirmation step unchanged
-        comm = st.session_state.get("community", "—")
-        dist = st.session_state.get("district", "—")
-        area = st.session_state.get("area", 90)
-        price = st.session_state.get("total_price", "—")
-        age = st.session_state.get("house_age", 0)
-        htype = st.session_state.get("house_type_layout", "—")
-        floor = st.session_state.get("floor_type", "—")
-        ptype = st.session_state.get("property_type", "—")
-        hard = st.session_state.get("hard_defect", "无")
-        loan = st.session_state.get("loan_type", "不贷款")
-        deco = st.session_state.get("decoration_level", "—")
-
-        st.markdown(f"""
-        <div style="background:#F8FAFC;border:2px solid #E2E8F0;border-radius:16px;padding:24px;line-height:2.2;font-size:16px;color:#334155">
-            <div style="font-size:20px;font-weight:700;color:#0F172A;margin-bottom:12px">🏘️ {comm}</div>
-            📍 {dist} ｜ 📐 {area}㎡ ｜ 💰 <b>{price}万</b><br>
-            🏠 {htype} ｜ {floor} ｜ {ptype}<br>
-            🕐 房龄 {age}年 ｜ 🛠️ {deco}<br>
-            {'⚠️ 硬伤: '+hard if hard!='无' else '✅ 无硬伤'}<br>
-            🏦 {loan}
-        </div>
-        """, unsafe_allow_html=True)
-
-        col_b, col_g = st.columns([1, 2])
-        with col_b:
-            if st.button("← 上一步", use_container_width=True, key="s6b"):
-                st.session_state["mobile_step"] = 5; st.rerun()
-        with col_g:
-            if st.button("📊 生成评估报告", type="primary", use_container_width=True, key="s6gen"):
-                st.session_state["report_generated"] = True
-                st.session_state["report_generated_at"] = datetime.now().strftime("%m-%d %H:%M")
-                st.session_state["client_active_tab"] = "📋 总览结论"
-                st.success("✅ 评估报告已生成，正在为你展示总览结论")
-                time.sleep(0.5)
-                st.rerun()
-
-def render_client_overview(params):
-    """客户模式——总览结论（复用已有逻辑）"""
-    render_tab_overview(params)
-
-
-def render_client_valuation(params):
-    """客户模式——估值分析"""
-    render_tab_valuation(params)
-
-
-def render_client_investment(params):
-    """客户模式——投资测算"""
-    render_tab_investment(params)
-
-
-def render_client_risk(params):
-    """客户模式——风险分析"""
-    render_tab_risk(params)
-
-
-def render_client_report(params):
-    """客户模式——分层专业报告（简单/详细/基金级）"""
-    from valuation import calculate_property_valuation
-    import os
-    from datetime import date
-
-    if not st.session_state.get("report_generated"):
-        st.info("👈 请先完成房源填写并点击「📊 生成评估报告」")
-        return
-
-    rt = st.session_state.get("report_type", "simple")
-
-    # 报告类型切换
-    ct1, ct2, ct3 = st.columns(3)
-    with ct1:
-        if st.button("📱 简单版", use_container_width=True,
-                      type="primary" if rt == "simple" else "secondary", key="rt_simple"):
-            st.session_state["report_type"] = "simple"; st.rerun()
-    with ct2:
-        if st.button("📊 详细版", use_container_width=True,
-                      type="primary" if rt == "detailed" else "secondary", key="rt_detailed"):
-            st.session_state["report_type"] = "detailed"; st.rerun()
-    with ct3:
-        if st.button("🏦 基金级", use_container_width=True,
-                      type="primary" if rt == "fund" else "secondary", key="rt_fund"):
-            st.session_state["report_type"] = "fund"; st.rerun()
-
-    st.caption(f"当前：{'简单版·30秒看懂' if rt=='simple' else '详细版·全面分析' if rt=='detailed' else '基金级·研究院报告'}")
+    # ── 生成按钮 ──
     st.divider()
-
-    if rt == "simple":
-        _render_simple_report(params)
-    elif rt == "detailed":
-        _render_detailed_report(params)
-    else:
-        render_tab_report(params)
-
-
-# ══════════════════════════════════════════════════════════════
-#  ADMIN MODE TABS
-# ══════════════════════════════════════════════════════════════
-
-def render_admin_database():
-    """后台——小区数据库（占位）"""
-    st.subheader("🏘️ 小区数据库")
-    st.markdown("""
-    <div style="background:#F8FAFC;border:1px dashed #CBD5E1;border-radius:8px;padding:40px;text-align:center;margin:20px 0">
-        <div style="font-size:40px;margin-bottom:12px">🏗️</div>
-        <div style="font-size:16px;font-weight:600;color:#64748B">小区数据库 — 规划中</div>
-        <div style="font-size:13px;color:#94A3B8;margin-top:8px;line-height:1.8">
-            未来将支持：小区名称、行政区、板块、建成年代、小区均价、成交均价<br>
-            租金水平、成交周期、挂牌量、学区等级、地铁距离、流动性等级
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    if st.button("📊 生成评估报告", type="primary", use_container_width=True, key="fast_gen"):
+        st.session_state["report_generated"] = True
+        st.session_state["report_generated_at"] = datetime.now().strftime("%m-%d %H:%M")
+        st.session_state["client_active_tab"] = "📋 总览结论"
+        st.success("✅ 评估报告已生成，正在为你展示总览结论")
+        time.sleep(0.5)
+        st.rerun()
 
 
-def render_admin_samples():
-    """后台——成交样本库（接入已有数据）"""
-    st.subheader("📊 成交样本库")
-    try:
-        from transaction_dataset import load_dataset
-        ds = load_dataset()
-        if ds:
-            import pandas as pd
-            st.metric("累计样本", len(ds))
-            rows = []
-            for s in ds[:50]:
-                rows.append({
-                    "小区": s.get("community_name", "?")[:12],
-                    "区域": s.get("district", "?"),
-                    "面积": s.get("area", 0),
-                    "挂牌": s.get("listing_price", 0),
-                    "成交": s.get("final_transaction_price", 0),
-                    "类型": s.get("asset_type", "?")[:6],
-                    "估值": f"{s.get('model_estimation', 0):.0f}",
-                    "偏差": f"{s.get('estimation_deviation', 0):+.1%}",
-                })
-            st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True,
-                         column_order=["小区","区域","面积","挂牌","成交","估值","偏差","类型"])
-        else:
-            st.info("暂无成交样本。运行 transaction_input.py 录入数据。")
-    except ImportError:
-        st.warning("transaction_dataset 模块未找到")
+def _ensure_defaults():
+    """首次进入设置系统默认值"""
+    defaults = {
+        "house_age": 20, "house_type_layout": "2室1厅", "floor_type": "中楼层",
+        "orientation_defect": "无", "decoration_level": "简装", "property_type": "商品房",
+        "monthly_rent": 5000, "vacancy_rate": 5, "hold_years": 10,
+        "price_growth": 0.0, "rent_growth": 2.0,
+        "subway_distance": "1公里内", "school_level": "普通学区",
+        "property_level": "普通", "hard_defect": "无",
+        "parking_ratio": "1:1", "mall_distance": "2公里内", "hospital_distance": "2公里内",
+        "layout_defect": "无", "building_defect": "无", "street_noise": "安静",
+        "is_full2": True, "is_full5_only": False, "has_elevator": True,
+        "repay_type": "等额本息", "is_first": True,
+        "loan_rate": 3.8, "gjj_rate": 3.1, "bank_rate": 3.8,
+    }
+    for k, v in defaults.items():
+        if k not in st.session_state:
+            st.session_state[k] = v
 
-
-def render_admin_import():
-    """后台——数据导入（占位）"""
-    st.subheader("📥 数据导入")
-    st.markdown("""
-    <div style="background:#F8FAFC;border:1px dashed #CBD5E1;border-radius:8px;padding:40px;text-align:center;margin:20px 0">
-        <div style="font-size:40px;margin-bottom:12px">📤</div>
-        <div style="font-size:16px;font-weight:600;color:#64748B">数据导入 — 规划中</div>
-        <div style="font-size:13px;color:#94A3B8;margin-top:8px;line-height:1.8">
-            未来支持：手动录入、Excel导入、CSV导入、外部接口导入<br><br>
-            当前可用的命令行工具：<code>python3 transaction_input.py</code>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-
-def render_admin_params():
-    """后台——模型参数（占位+默认值展示）"""
-    st.subheader("⚙️ 模型参数")
-    try:
-        from valuation import DEFAULT_WEIGHTS
-        st.caption("当前估值模型默认权重（V5 冻结版本）")
-        rows = []
-        dim_names = {
-            "location":"地段价值","liquidity":"流动性","property_quality":"房屋品质",
-            "cashflow":"现金流能力","school_public":"学区与公共资源",
-            "risk_resilience":"抗跌与风险","leverage_safety":"金融杠杆安全",
-            "macro_cycle":"宏观周期","scarcity_potential":"稀缺性与未来潜力"
-        }
-        for k, v in DEFAULT_WEIGHTS.items():
-            rows.append({"维度": dim_names.get(k, k), "权重": f"{v:.0%}"})
-        import pandas as pd
-        st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
-    except ImportError:
-        st.warning("valuation 模块未找到")
-    st.caption("参数调整功能将在后续版本开放")
-
-
-def render_admin_quality():
-    """后台——数据质量（接入已有系统）"""
-    st.subheader("✅ 数据质量")
-    try:
-        from data_quality_system import data_health_report, coverage_analysis
-        from transaction_dataset import load_dataset
-        ds = load_dataset()
-        if ds:
-            health = data_health_report(ds)
-            cov = coverage_analysis(ds)
-
-            col_q1, col_q2, col_q3, col_q4 = st.columns(4)
-            col_q1.metric("样本总数", health["total"])
-            col_q2.metric("平均质量分", f"{health['avg_quality_score']:.0f}/100")
-            col_q3.metric("高质量占比", f"{health['high_quality_pct']}%")
-            col_q4.metric("异常总数", health["total_anomalies"])
-
-            st.divider()
-            st.subheader("覆盖面")
-            col_c1, col_c2 = st.columns(2)
-            with col_c1:
-                st.write("**区域覆盖**：")
-                for dist, cnt in sorted(cov["district"].items()):
-                    if cnt == 0: st.markdown(f"- {dist}：⚠️ **0**")
-                    elif cnt <= 2: st.markdown(f"- {dist}：{cnt}")
-                    else: st.markdown(f"- {dist}：{cnt} ✅")
-            with col_c2:
-                st.write("**资产类型覆盖**：")
-                for at, cnt in cov["asset_type"].items():
-                    if cnt == 0: st.markdown(f"- {at}：⚠️ **0**")
-                    else: st.markdown(f"- {at}：{cnt}")
-        else:
-            st.info("暂无成交数据")
-    except ImportError as e:
-        st.warning(f"数据质量模块未加载: {e}")
-
-
-def render_admin_dashboard():
-    """后台——研究仪表盘（接入已有系统）"""
-    st.subheader("📈 研究仪表盘")
-    try:
-        from research_dashboard import core_statistics, rank_properties, stability_ranking
-        from transaction_dataset import load_dataset
-        ds = load_dataset()
-        if ds:
-            stats = core_statistics(ds)
-            ranks = rank_properties(ds)
-            stability = stability_ranking(ds)
-
-            col_d1, col_d2, col_d3, col_d4 = st.columns(4)
-            col_d1.metric("总样本", stats["total"])
-            col_d2.metric("平均偏差", f"{stats['avg_deviation']:+.1%}")
-            col_d3.metric("平均绝对偏差", f"{stats['avg_abs_deviation']:+.1%}")
-            col_d4.metric("趋势", stats["deviation_trend"])
-
-            st.divider()
-            st.subheader("⚠️ 最容易高估")
-            for r in ranks["most_overvalued"][:3]:
-                st.markdown(f"- {r['name']} ({r['district']}) 偏差 {r['deviation']:+.1%}")
-
-            st.subheader("📉 最容易低估")
-            for r in ranks["most_undervalued"][:3]:
-                st.markdown(f"- {r['name']} ({r['district']}) 偏差 {r['deviation']:+.1%}")
-
-            st.subheader("🟢 最稳定区域")
-            for dist, info in stability["most_stable"]:
-                st.markdown(f"- {dist} (偏差{info['abs_avg_deviation']:+.1%})")
-        else:
-            st.info("暂无成交数据。命令行运行：python3 research_dashboard.py")
-    except ImportError:
-        st.warning("research_dashboard 模块未加载")
-
-
-# ═══════════ 简单版报告 ═══════════
-
-def _render_simple_report(params):
-    """30秒看懂——极简版"""
-    from valuation import calculate_property_valuation
-    import os
-
-    p = _get_val_params()
-    result = calculate_property_valuation(p)
-
-    model = result["final_model_value"]
-    asking = result["asking_price"]
-    level = result["valuation_level"]
-    icon = result["level_icon"]
-    margin = result["safety_margin"]
-    hard = p.get("hard_defect", "无")
-    atype = result["asset_name"]
-    is_highrisk = (atype == "高风险型" or hard in ["凶宅/非正常死亡", "有查封", "共有产权", "商住两用"])
-
-    if is_highrisk:
-        safe_buy = round(model * 0.85, 0)
-    else:
-        safe_buy = round(model * 0.90, 0)
-    aggressive_buy = round(model * 1.05, 0) if not is_highrisk else round(model * 1.00, 0)
-
-    # 购买建议
-    if "明显低估" in level: advice = "这套房当前报价偏低，性价比不错。如果房子本身没问题，值得重点关注。"
-    elif "略低估" in level: advice = "价格有一定吸引力，可以继续谈。争取在合理区间拿下。"
-    elif "价格合理" in level: advice = "报价在合理范围内，是否购买更多取决于你自己的需求和预算。"
-    elif "略高估" in level: advice = "价格偏高了一点，建议用我们的报告作为依据去压价。"
-    elif "明显高估" in level and is_highrisk: advice = "这套房风险较高，报价也不便宜。除非你有充分心理准备和专业尽调能力，否则不建议。"
-    else: advice = "报价明显偏高。除非你对这套房有特别需求，否则建议等待或换别的看看。"
-
-    st.markdown(f"""
-    <div style="background:#F8FAFC;border-radius:16px;padding:24px;margin:12px 0;text-align:center">
-        <div style="font-size:56px;margin-bottom:8px">{icon}</div>
-        <div style="font-size:22px;font-weight:800;color:#0F172A">{level}</div>
-        <div style="font-size:15px;color:#475569;margin-top:12px;line-height:1.8">{advice}</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # 买入区间
-    st.subheader("💡 建议买入价")
-    c1, c2, c3 = st.columns(3)
-    c1.metric("偏保守", f"{safe_buy:.0f}万")
-    c2.metric("当前报价", f"{asking:.0f}万")
-    c3.metric("偏积极", f"{aggressive_buy:.0f}万")
-    st.caption(f"建议区间：{safe_buy:.0f}万 ~ {aggressive_buy:.0f}万")
-
-    st.divider()
-    st.subheader("👍 优势 / ⚠️ 风险")
-    all_adj = result.get("core_details", []) + result.get("macro_details", [])
-    pos = sorted([d for d in all_adj if d["adjustment"] > 0.003], key=lambda x: -x["adjustment"])[:2]
-    neg = sorted([d for d in all_adj if d["adjustment"] < -0.003], key=lambda x: x["adjustment"])[:2]
-
-    if pos:
-        for d in pos:
-            explain = _humanize_factor(d['factor_name'], d.get('value',''), d['adjustment'])
-            st.success(explain[:100])
-    if neg:
-        for d in neg:
-            explain = _humanize_factor(d['factor_name'], d.get('value',''), d['adjustment'])
-            st.error(explain[:100])
-
-    st.divider()
-    st.subheader("👤 适合你吗")
-    buyers = _collect_structured_buyers(result, p)
-    for b in buyers:
-        icon_b = "✅" if b["suitable"] else "❌"
-        st.markdown(f"{icon_b} **{b['type']}**")
-
-    st.caption("以上建议由系统自动生成，仅供参考。买房是大事，建议结合实地看房和家人商量决定。")
-
-
-# ═══════════ 详细版报告 ═══════════
-
-def _render_detailed_report(params):
-    """全面分析——详细版"""
-    from valuation import calculate_property_valuation
-    import os
-    from datetime import date
-
-    p = _get_val_params()
-    result = calculate_property_valuation(p)
-    today = date.today().strftime("%Y年%m月%d日")
-    community = st.session_state.get("community", "—")
-    district = st.session_state.get("district", "—")
-    area = st.session_state.get("area", 90)
-    asking = result["asking_price"]
-    model = result["final_model_value"]
-    level = result["valuation_level"]
-    icon = result["level_icon"]
-    margin = result["safety_margin"]
-    hard = p.get("hard_defect", "无")
-    atype = result["asset_name"]
-    is_highrisk = (atype == "高风险型" or hard in ["凶宅/非正常死亡", "有查封", "共有产权", "商住两用"])
-    if is_highrisk:
-        safe_buy = round(model * 0.85, 0)
-        fair_buy = round(model * 0.95, 0)
-        aggressive_buy = round(model * 1.00, 0)
-    else:
-        safe_buy = round(model * 0.90, 0)
-        fair_buy = round(model * 0.98, 0)
-        aggressive_buy = round(model * 1.05, 0)
-
-    # 封面
-    st.markdown(f"""
-    <div style="background:linear-gradient(180deg,#0F172A,#1E293B);color:#fff;padding:32px 24px;border-radius:8px;text-align:center;margin-bottom:20px">
-        <div style="font-size:10px;letter-spacing:4px;color:rgba(255,255,255,.3)">KANFANG AI BOOK</div>
-        <div style="font-size:20px;font-weight:300;letter-spacing:2px;margin:8px 0">北京住宅投资价值评估报告</div>
-        <div style="width:40px;height:1px;background:rgba(255,255,255,.2);margin:12px auto"></div>
-        <div style="font-size:12px;color:rgba(255,255,255,.4)">{community} · {district} · {area}㎡ · 报价{asking:.0f}万 · {today}</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # 1. 最终结论
-    final_line = _generate_final_one_liner(result, p)
-    st.markdown(f"""
-    <div style="background:#F8FAFC;border-left:4px solid #2563EB;padding:16px;margin:12px 0;border-radius:0 8px 8px 0;font-size:15px;line-height:1.8;color:#334155">
-        <b>{icon} {level}：</b>{final_line}
-    </div>
-    """, unsafe_allow_html=True)
-
-    # 2. 估值分析
-    st.subheader("💰 估值分析")
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("挂牌价", f"{asking:.0f}万")
-    c2.metric("模型估值", f"{model:.0f}万", delta=f"{margin:+.1%}")
-    c3.metric("安全买入", f"{safe_buy:.0f}万")
-    c4.metric("积极买入", f"{aggressive_buy:.0f}万")
-
-    # 3. 加减分
-    st.subheader("📊 为什么这么判断")
-    all_adj = result.get("core_details", []) + result.get("macro_details", []) + result.get("liquidity_details", [])
-    pos = sorted([d for d in all_adj if d["adjustment"] > 0.003], key=lambda x: -x["adjustment"])[:4]
-    neg = sorted([d for d in all_adj if d["adjustment"] < -0.003], key=lambda x: x["adjustment"])[:4]
-
-    for d in pos + neg:
-        sign = "+" if d["adjustment"] >= 0 else ""
-        color = "#059669" if d["adjustment"] >= 0 else "#DC2626"
-        bg = "#F0FDF4" if d["adjustment"] >= 0 else "#FEF2F2"
-        border = "#86EFAC" if d["adjustment"] >= 0 else "#FECACA"
-        explain = _humanize_factor(d["factor_name"], d.get("value",""), d["adjustment"])
-        st.markdown(f'<div style="background:{bg};border-left:4px solid {border};padding:8px 14px;margin:4px 0;border-radius:0 6px 6px 0;font-size:13px"><b style="color:{color}">{sign}{d["adjustment"]:.0%}</b> {explain[:100]}</div>', unsafe_allow_html=True)
-
-    # 4. 投资测算
-    st.subheader("📈 投资测算")
-    irr_val, cash_val, payback_val = "—", "—", "—"
-    try:
-        from calculations import calc_professional_metrics, calc_hold_cash, calc_sell_profit, get_school_premium, get_amenity_premium, get_defect_discount
-        tp = asking * 10000
-        hy = st.session_state.get("hold_years", 10)
-        rent = st.session_state.get("monthly_rent", 5000)
-        input_money = tp * 0.35
-        mm = 0
-        if st.session_state.get("loan_type", "不贷款") != "不贷款":
-            mm = tp * st.session_state.get("loan_ratio", 65) / 100 * 0.004
-        sp = get_school_premium(False, st.session_state.get("school_level","普通学区"), "多校划片(中等概率)", "小学")
-        ap = get_amenity_premium(st.session_state.get("subway_distance","1公里内"), st.session_state.get("hospital_distance","1公里内"), st.session_state.get("mall_distance","2公里内"))
-        dd = get_defect_discount(st.session_state.get("orientation_defect","无"), st.session_state.get("layout_defect","无"), st.session_state.get("building_defect","无"), p.get("hard_defect","无"))
-        cflows = []
-        for y in range(hy):
-            h = calc_hold_cash(area, 6.0, 30.0, 5000, rent, st.session_state.get("vacancy_rate",5), mm, st.session_state.get("rent_growth",2.0), y)
-            cflows.append(h["年净现金流"])
-        sell_res = calc_sell_profit(tp, hy, st.session_state.get("price_growth",3.0), 0, 0.02, True, False, input_money, sp, ap, dd)
-        profit = sell_res["总净利润"]
-        m = calc_professional_metrics(input_money, profit, cflows, hy, rent, tp, cflows[0]+mm*12 if cflows else 0, mm)
-        irr_val = f"{m['IRR年化收益率']}%"
-        cash_val = f"{cflows[0]//12:.0f}元/月" if cflows else "—"
-        payback_val = f"{m['静态回本周期(年)']}年"
-    except: pass
-
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("IRR", irr_val)
-    c2.metric("月净现金流", cash_val)
-    c3.metric("回本周期", payback_val)
-    c4.metric("安全边际", f"{margin:+.1%}")
-
-    # 5. 风险分析
-    st.subheader("⚠️ 风险分析")
-    risks = _collect_structured_risks(result, p)
-    for r in risks[:6]:
-        emoji = "🔴" if r["level"]=="高" else "🟡" if r["level"]=="中" else "🟢"
-        st.markdown(f"{emoji} **{r['name']}**：{r['detail'][:80]}")
-
-    # 6. 压力测试
-    st.subheader("📉 压力测试")
-    try:
-        from calculations import stress_test as stest
-        tp2 = asking * 10000
-        hy2 = st.session_state.get("hold_years", 10)
-        rent2 = st.session_state.get("monthly_rent", 5000)
-        input_m2 = tp2 * 0.35
-        sres = stest(tp2, hy2, mm, input_m2, rent2, area, 6.0, 30.0, 5000, st.session_state.get("vacancy_rate",5), st.session_state.get("price_growth",3.0), st.session_state.get("rent_growth",2.0), sp, ap, dd)
-        import pandas as pd
-        st.dataframe(sres, hide_index=True, use_container_width=True)
-    except: st.caption("参数不足")
-
-    # 7. 最终建议
-    st.subheader("🎯 最终建议")
-    _render_action_advice(result, p)
-    st.caption("以上分析基于模型自动生成，仅供参考。投资有风险，入市需谨慎。")
