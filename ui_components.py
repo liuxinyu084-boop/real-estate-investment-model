@@ -2528,6 +2528,24 @@ def render_client_input(params):
     # ═══ Step 6: 确认生成 ═══
     elif step == 6:
         st.subheader("📋 确认后生成评估报告")
+
+        # 报告类型选择
+        st.caption("请选择报告类型")
+        if "report_type" not in st.session_state:
+            st.session_state["report_type"] = "simple"
+        rt = st.radio("报告类型", [
+            "📱 简单版 — 30秒看懂值不值得买",
+            "📊 详细版 — 全面分析为什么好/不好",
+            "🏦 基金级 — 研究院级专业评估报告"
+        ], key="report_type_selector", label_visibility="collapsed",
+        index={"simple":0,"detailed":1,"fund":2}.get(st.session_state.get("report_type","simple"),0))
+        # Map selected label back
+        if "简单版" in rt: st.session_state["report_type"] = "simple"
+        elif "详细版" in rt: st.session_state["report_type"] = "detailed"
+        else: st.session_state["report_type"] = "fund"
+
+        st.divider()
+        # ...rest of confirmation step unchanged
         comm = st.session_state.get("community", "—")
         dist = st.session_state.get("district", "—")
         area = st.session_state.get("area", 90)
@@ -2585,8 +2603,41 @@ def render_client_risk(params):
 
 
 def render_client_report(params):
-    """客户模式——专业报告"""
-    render_tab_report(params)
+    """客户模式——分层专业报告（简单/详细/基金级）"""
+    from valuation import calculate_property_valuation
+    import os
+    from datetime import date
+
+    if not st.session_state.get("report_generated"):
+        st.info("👈 请先完成房源填写并点击「📊 生成评估报告」")
+        return
+
+    rt = st.session_state.get("report_type", "simple")
+
+    # 报告类型切换
+    ct1, ct2, ct3 = st.columns(3)
+    with ct1:
+        if st.button("📱 简单版", use_container_width=True,
+                      type="primary" if rt == "simple" else "secondary", key="rt_simple"):
+            st.session_state["report_type"] = "simple"; st.rerun()
+    with ct2:
+        if st.button("📊 详细版", use_container_width=True,
+                      type="primary" if rt == "detailed" else "secondary", key="rt_detailed"):
+            st.session_state["report_type"] = "detailed"; st.rerun()
+    with ct3:
+        if st.button("🏦 基金级", use_container_width=True,
+                      type="primary" if rt == "fund" else "secondary", key="rt_fund"):
+            st.session_state["report_type"] = "fund"; st.rerun()
+
+    st.caption(f"当前：{'简单版·30秒看懂' if rt=='simple' else '详细版·全面分析' if rt=='detailed' else '基金级·研究院报告'}")
+    st.divider()
+
+    if rt == "simple":
+        _render_simple_report(params)
+    elif rt == "detailed":
+        _render_detailed_report(params)
+    else:
+        render_tab_report(params)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -2745,3 +2796,207 @@ def render_admin_dashboard():
             st.info("暂无成交数据。命令行运行：python3 research_dashboard.py")
     except ImportError:
         st.warning("research_dashboard 模块未加载")
+
+
+# ═══════════ 简单版报告 ═══════════
+
+def _render_simple_report(params):
+    """30秒看懂——极简版"""
+    from valuation import calculate_property_valuation
+    import os
+
+    p = _get_val_params()
+    result = calculate_property_valuation(p)
+
+    model = result["final_model_value"]
+    asking = result["asking_price"]
+    level = result["valuation_level"]
+    icon = result["level_icon"]
+    margin = result["safety_margin"]
+    hard = p.get("hard_defect", "无")
+    atype = result["asset_name"]
+    is_highrisk = (atype == "高风险型" or hard in ["凶宅/非正常死亡", "有查封", "共有产权", "商住两用"])
+
+    if is_highrisk:
+        safe_buy = round(model * 0.85, 0)
+    else:
+        safe_buy = round(model * 0.90, 0)
+    aggressive_buy = round(model * 1.05, 0) if not is_highrisk else round(model * 1.00, 0)
+
+    # 购买建议
+    if "明显低估" in level: advice = "这套房当前报价偏低，性价比不错。如果房子本身没问题，值得重点关注。"
+    elif "略低估" in level: advice = "价格有一定吸引力，可以继续谈。争取在合理区间拿下。"
+    elif "价格合理" in level: advice = "报价在合理范围内，是否购买更多取决于你自己的需求和预算。"
+    elif "略高估" in level: advice = "价格偏高了一点，建议用我们的报告作为依据去压价。"
+    elif "明显高估" in level and is_highrisk: advice = "这套房风险较高，报价也不便宜。除非你有充分心理准备和专业尽调能力，否则不建议。"
+    else: advice = "报价明显偏高。除非你对这套房有特别需求，否则建议等待或换别的看看。"
+
+    st.markdown(f"""
+    <div style="background:#F8FAFC;border-radius:16px;padding:24px;margin:12px 0;text-align:center">
+        <div style="font-size:56px;margin-bottom:8px">{icon}</div>
+        <div style="font-size:22px;font-weight:800;color:#0F172A">{level}</div>
+        <div style="font-size:15px;color:#475569;margin-top:12px;line-height:1.8">{advice}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # 买入区间
+    st.subheader("💡 建议买入价")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("偏保守", f"{safe_buy:.0f}万")
+    c2.metric("当前报价", f"{asking:.0f}万")
+    c3.metric("偏积极", f"{aggressive_buy:.0f}万")
+    st.caption(f"建议区间：{safe_buy:.0f}万 ~ {aggressive_buy:.0f}万")
+
+    st.divider()
+    st.subheader("👍 优势 / ⚠️ 风险")
+    all_adj = result.get("core_details", []) + result.get("macro_details", [])
+    pos = sorted([d for d in all_adj if d["adjustment"] > 0.003], key=lambda x: -x["adjustment"])[:2]
+    neg = sorted([d for d in all_adj if d["adjustment"] < -0.003], key=lambda x: x["adjustment"])[:2]
+
+    if pos:
+        for d in pos:
+            explain = _humanize_factor(d['factor_name'], d.get('value',''), d['adjustment'])
+            st.success(explain[:100])
+    if neg:
+        for d in neg:
+            explain = _humanize_factor(d['factor_name'], d.get('value',''), d['adjustment'])
+            st.error(explain[:100])
+
+    st.divider()
+    st.subheader("👤 适合你吗")
+    buyers = _collect_structured_buyers(result, p)
+    for b in buyers:
+        icon_b = "✅" if b["suitable"] else "❌"
+        st.markdown(f"{icon_b} **{b['type']}**")
+
+    st.caption("以上建议由系统自动生成，仅供参考。买房是大事，建议结合实地看房和家人商量决定。")
+
+
+# ═══════════ 详细版报告 ═══════════
+
+def _render_detailed_report(params):
+    """全面分析——详细版"""
+    from valuation import calculate_property_valuation
+    import os
+    from datetime import date
+
+    p = _get_val_params()
+    result = calculate_property_valuation(p)
+    today = date.today().strftime("%Y年%m月%d日")
+    community = st.session_state.get("community", "—")
+    district = st.session_state.get("district", "—")
+    area = st.session_state.get("area", 90)
+    asking = result["asking_price"]
+    model = result["final_model_value"]
+    level = result["valuation_level"]
+    icon = result["level_icon"]
+    margin = result["safety_margin"]
+    hard = p.get("hard_defect", "无")
+    atype = result["asset_name"]
+    is_highrisk = (atype == "高风险型" or hard in ["凶宅/非正常死亡", "有查封", "共有产权", "商住两用"])
+    if is_highrisk:
+        safe_buy = round(model * 0.85, 0)
+        fair_buy = round(model * 0.95, 0)
+        aggressive_buy = round(model * 1.00, 0)
+    else:
+        safe_buy = round(model * 0.90, 0)
+        fair_buy = round(model * 0.98, 0)
+        aggressive_buy = round(model * 1.05, 0)
+
+    # 封面
+    st.markdown(f"""
+    <div style="background:linear-gradient(180deg,#0F172A,#1E293B);color:#fff;padding:32px 24px;border-radius:8px;text-align:center;margin-bottom:20px">
+        <div style="font-size:10px;letter-spacing:4px;color:rgba(255,255,255,.3)">KANFANG AI BOOK</div>
+        <div style="font-size:20px;font-weight:300;letter-spacing:2px;margin:8px 0">北京住宅投资价值评估报告</div>
+        <div style="width:40px;height:1px;background:rgba(255,255,255,.2);margin:12px auto"></div>
+        <div style="font-size:12px;color:rgba(255,255,255,.4)">{community} · {district} · {area}㎡ · 报价{asking:.0f}万 · {today}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # 1. 最终结论
+    final_line = _generate_final_one_liner(result, p)
+    st.markdown(f"""
+    <div style="background:#F8FAFC;border-left:4px solid #2563EB;padding:16px;margin:12px 0;border-radius:0 8px 8px 0;font-size:15px;line-height:1.8;color:#334155">
+        <b>{icon} {level}：</b>{final_line}
+    </div>
+    """, unsafe_allow_html=True)
+
+    # 2. 估值分析
+    st.subheader("💰 估值分析")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("挂牌价", f"{asking:.0f}万")
+    c2.metric("模型估值", f"{model:.0f}万", delta=f"{margin:+.1%}")
+    c3.metric("安全买入", f"{safe_buy:.0f}万")
+    c4.metric("积极买入", f"{aggressive_buy:.0f}万")
+
+    # 3. 加减分
+    st.subheader("📊 为什么这么判断")
+    all_adj = result.get("core_details", []) + result.get("macro_details", []) + result.get("liquidity_details", [])
+    pos = sorted([d for d in all_adj if d["adjustment"] > 0.003], key=lambda x: -x["adjustment"])[:4]
+    neg = sorted([d for d in all_adj if d["adjustment"] < -0.003], key=lambda x: x["adjustment"])[:4]
+
+    for d in pos + neg:
+        sign = "+" if d["adjustment"] >= 0 else ""
+        color = "#059669" if d["adjustment"] >= 0 else "#DC2626"
+        bg = "#F0FDF4" if d["adjustment"] >= 0 else "#FEF2F2"
+        border = "#86EFAC" if d["adjustment"] >= 0 else "#FECACA"
+        explain = _humanize_factor(d["factor_name"], d.get("value",""), d["adjustment"])
+        st.markdown(f'<div style="background:{bg};border-left:4px solid {border};padding:8px 14px;margin:4px 0;border-radius:0 6px 6px 0;font-size:13px"><b style="color:{color}">{sign}{d["adjustment"]:.0%}</b> {explain[:100]}</div>', unsafe_allow_html=True)
+
+    # 4. 投资测算
+    st.subheader("📈 投资测算")
+    irr_val, cash_val, payback_val = "—", "—", "—"
+    try:
+        from calculations import calc_professional_metrics, calc_hold_cash, calc_sell_profit, get_school_premium, get_amenity_premium, get_defect_discount
+        tp = asking * 10000
+        hy = st.session_state.get("hold_years", 10)
+        rent = st.session_state.get("monthly_rent", 5000)
+        input_money = tp * 0.35
+        mm = 0
+        if st.session_state.get("loan_type", "不贷款") != "不贷款":
+            mm = tp * st.session_state.get("loan_ratio", 65) / 100 * 0.004
+        sp = get_school_premium(False, st.session_state.get("school_level","普通学区"), "多校划片(中等概率)", "小学")
+        ap = get_amenity_premium(st.session_state.get("subway_distance","1公里内"), st.session_state.get("hospital_distance","1公里内"), st.session_state.get("mall_distance","2公里内"))
+        dd = get_defect_discount(st.session_state.get("orientation_defect","无"), st.session_state.get("layout_defect","无"), st.session_state.get("building_defect","无"), p.get("hard_defect","无"))
+        cflows = []
+        for y in range(hy):
+            h = calc_hold_cash(area, 6.0, 30.0, 5000, rent, st.session_state.get("vacancy_rate",5), mm, st.session_state.get("rent_growth",2.0), y)
+            cflows.append(h["年净现金流"])
+        sell_res = calc_sell_profit(tp, hy, st.session_state.get("price_growth",3.0), 0, 0.02, True, False, input_money, sp, ap, dd)
+        profit = sell_res["总净利润"]
+        m = calc_professional_metrics(input_money, profit, cflows, hy, rent, tp, cflows[0]+mm*12 if cflows else 0, mm)
+        irr_val = f"{m['IRR年化收益率']}%"
+        cash_val = f"{cflows[0]//12:.0f}元/月" if cflows else "—"
+        payback_val = f"{m['静态回本周期(年)']}年"
+    except: pass
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("IRR", irr_val)
+    c2.metric("月净现金流", cash_val)
+    c3.metric("回本周期", payback_val)
+    c4.metric("安全边际", f"{margin:+.1%}")
+
+    # 5. 风险分析
+    st.subheader("⚠️ 风险分析")
+    risks = _collect_structured_risks(result, p)
+    for r in risks[:6]:
+        emoji = "🔴" if r["level"]=="高" else "🟡" if r["level"]=="中" else "🟢"
+        st.markdown(f"{emoji} **{r['name']}**：{r['detail'][:80]}")
+
+    # 6. 压力测试
+    st.subheader("📉 压力测试")
+    try:
+        from calculations import stress_test as stest
+        tp2 = asking * 10000
+        hy2 = st.session_state.get("hold_years", 10)
+        rent2 = st.session_state.get("monthly_rent", 5000)
+        input_m2 = tp2 * 0.35
+        sres = stest(tp2, hy2, mm, input_m2, rent2, area, 6.0, 30.0, 5000, st.session_state.get("vacancy_rate",5), st.session_state.get("price_growth",3.0), st.session_state.get("rent_growth",2.0), sp, ap, dd)
+        import pandas as pd
+        st.dataframe(sres, hide_index=True, use_container_width=True)
+    except: st.caption("参数不足")
+
+    # 7. 最终建议
+    st.subheader("🎯 最终建议")
+    _render_action_advice(result, p)
+    st.caption("以上分析基于模型自动生成，仅供参考。投资有风险，入市需谨慎。")
