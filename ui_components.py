@@ -1016,3 +1016,155 @@ def render_report():
     """
     st.markdown(explain_text)
     st.success("✅ 黑石级基金投资报告生成完毕！本报告仅供内部投资决策参考，不构成任何投资建议。")
+
+
+# ══════════════════════════════════════════════════════════════
+#  V5 估值分析面板
+# ══════════════════════════════════════════════════════════════
+
+def render_valuation(params):
+    """AI估值分析面板——调用 V5 估值引擎"""
+    try:
+        from valuation import calculate_property_valuation
+        from dataset_analysis import compute_confidence_score
+        from transaction_dataset import load_dataset
+    except ImportError:
+        st.warning("⚠️ 估值模块未加载")
+        return
+
+    # 映射 Streamlit session_state → valuation.py 输入参数
+    p = {
+        "community_avg_price": st.session_state.get("total_price", 500) * 10000 / max(st.session_state.get("area", 90), 1),
+        "area": st.session_state.get("area", 90),
+        "asking_price": st.session_state.get("total_price", 500),
+        "district": st.session_state.get("district", "朝阳"),
+        "property_type": st.session_state.get("property_type", "商品房"),
+        "house_age": st.session_state.get("house_age", 5),
+        "floor_type": st.session_state.get("floor_type", "中楼层"),
+        "orientation_type": _map_orientation(st.session_state.get("orientation_defect", "无")),
+        "subway_distance": st.session_state.get("subway_distance", "1公里内"),
+        "school_level": st.session_state.get("school_level", "普通学区"),
+        "property_management_level": st.session_state.get("property_level", "普通"),
+        "liquidity_level": "一般",
+        "decoration_level": st.session_state.get("decoration_level", "简装"),
+        "plot_ratio": st.session_state.get("volume_rate", 2.5),
+        "green_ratio": st.session_state.get("green_rate", 30),
+        "parking_ratio": _map_parking(st.session_state.get("parking_ratio", "1:1")),
+        "mall_distance": st.session_state.get("mall_distance", "2公里内"),
+        "hospital_distance": st.session_state.get("hospital_distance", "2公里内"),
+        "is_two_years": st.session_state.get("is_full2", True),
+        "is_five_unique": st.session_state.get("is_full5_only", False),
+        "layout_defect": st.session_state.get("layout_defect", "无"),
+        "building_defect": st.session_state.get("building_defect", "无"),
+        "hard_defect": st.session_state.get("hard_defect", "无"),
+        "liquidity_pressure_level": "一般",
+    }
+    # 朝向映射
+    orientation = st.session_state.get("orientation_defect", "无")
+    if orientation == "东西向": p["orientation_type"] = "东西向"
+    elif orientation == "北向": p["orientation_type"] = "北向"
+    elif orientation == "西北/东北": p["orientation_type"] = "西北/东北"
+    # 学区
+    if st.session_state.get("is_school", False):
+        p["school_level"] = st.session_state.get("school_level", "区重点")
+
+    result = calculate_property_valuation(p)
+
+    # 可信度
+    ds = load_dataset() if os.path.exists("transaction_dataset.json") else []
+    conf = compute_confidence_score(ds, result.get("asset_type")) if ds else {"grade": "C", "total_score": 50}
+
+    st.divider()
+    st.header("🧠 AI 估值分析")
+
+    # ── 估值结论卡片 ──
+    icon = result["level_icon"]
+    level = result["valuation_level"]
+    bg = "#ECFDF5" if "低估" in level else "#FEF2F2" if "高估" in level else "#F0F7FF"
+    st.markdown(f"""
+    <div style="background:{bg};border-radius:12px;padding:20px;text-align:center;margin:10px 0">
+        <div style="font-size:48px">{icon}</div>
+        <div style="font-size:24px;font-weight:800;color:#1E293B">{level}</div>
+        <div style="font-size:14px;color:#64748B;margin-top:8px">资产类型：{result['asset_name']} · 可信度：{conf['grade']} 级</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── 三价对比 ──
+    st.subheader("💰 估值 vs 报价 vs 预测成交")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("📋 挂牌价", f"{result['asking_price']:.0f} 万元")
+    c2.metric("🧠 模型估值", f"{result['final_model_value']:.0f} 万元",
+              delta=f"{result['safety_margin']:+.1%}")
+    c3.metric("🤝 预测成交价", f"{result['estimated_final_transaction_price']:.0f} 万元",
+              delta=f"{result['predicted_negotiation_range'][0]:.0%}~{result['predicted_negotiation_range'][1]:.0%} 议价")
+
+    # ── 核心指标卡片 ──
+    st.subheader("📊 估值核心指标")
+    m1, m2, m3, m4, m5 = st.columns(5)
+    m1.metric("安全边际", f"{result['safety_margin']:+.1%}")
+    m2.metric("微观评分", f"{result['micro_unit_score']}")
+    m3.metric("流动性评分", f"{result['liquidity_score']}")
+    m4.metric("市场参考价", f"{result['market_reference_value']:.0f}万")
+    m5.metric("议价空间", f"{result['predicted_negotiation_range'][0]:.0%}~{result['predicted_negotiation_range'][1]:.0%}")
+
+    # ── 资产类型识别 ──
+    st.subheader("🏷️ 资产类型识别")
+    st.info(f"**{result['asset_name']}** — {result['asset_features']}")
+    if result.get("activated_rules"):
+        st.caption(f"✅ 激活规则：{', '.join(result['activated_rules'])}")
+    if result.get("disabled_rules"):
+        st.caption(f"⛔ 关闭规则：{', '.join(result['disabled_rules'])}")
+
+    # ── 估值逻辑说明：加减分 ──
+    col_left, col_right = st.columns(2)
+    with col_left:
+        st.subheader("🟢 加分项")
+        pos = [d for d in result.get("core_details", []) if d["adjustment"] > 0.002]
+        pos += [d for d in result.get("macro_details", []) if d["adjustment"] > 0.002]
+        pos += [d for d in result.get("liquidity_details", []) if d["adjustment"] > 0]
+        pos.sort(key=lambda x: -x["adjustment"])
+        for d in pos[:8]:
+            st.markdown(f"+ **{d['factor_name']}**：{d['value']} → +{d['adjustment']:.0%}")
+    with col_right:
+        st.subheader("🔴 减分项")
+        neg = [d for d in result.get("core_details", []) if d["adjustment"] < -0.002]
+        neg += [d for d in result.get("macro_details", []) if d["adjustment"] < -0.002]
+        neg += [d for d in result.get("liquidity_details", []) if d["adjustment"] < 0]
+        neg.sort(key=lambda x: x["adjustment"])
+        for d in neg[:8]:
+            st.markdown(f"- **{d['factor_name']}**：{d['value']} → {d['adjustment']:.0%}")
+
+    # ── TOP5 影响因子 ──
+    st.subheader("📈 TOP5 影响因子")
+    all_adj = result.get("core_details", []) + result.get("macro_details", []) + result.get("liquidity_details", [])
+    all_adj.sort(key=lambda x: -abs(x["adjustment"]))
+    top5 = all_adj[:5]
+    for i, d in enumerate(top5):
+        sign = "+" if d["adjustment"] >= 0 else ""
+        st.progress(min(abs(d["adjustment"]) * 8, 1.0),
+                     text=f"{i+1}. {d['factor_name']}: {d['value']} ({sign}{d['adjustment']:.0%})")
+
+    # ── 流动性分析 ──
+    st.subheader("💧 流动性分析")
+    lq = result["liquidity_score"]
+    if lq >= 70: diff = "容易出手"
+    elif lq >= 50: diff = "正常周转"
+    elif lq >= 30: diff = "有一定难度"
+    else: diff = "难以出手"
+    lc1, lc2, lc3 = st.columns(3)
+    lc1.metric("成交难度", diff)
+    lc2.metric("流动性评分", f"{lq}")
+    lc3.metric("建议议价", f"{result['predicted_negotiation_range'][0]:.0%}~{result['predicted_negotiation_range'][1]:.0%}")
+    if result.get("liquidity_details"):
+        st.caption(" | ".join(d["remark"] for d in result["liquidity_details"] if d.get("remark")))
+
+
+def _map_orientation(defect):
+    m = {"无": "南向", "东西向": "东西向", "北向": "北向", "西北/东北": "西北/东北"}
+    return m.get(defect, "南向")
+
+def _map_parking(ratio):
+    m = {"1:2以上": "1:2以上", "1:1.5": "1:1.5", "1:1": "1:1", "1:0.8": "1:0.8", "1:0.5以下": "1:0.5以下"}
+    return m.get(ratio, "1:1")
+
+import os
