@@ -633,99 +633,98 @@ def render_poster():
         
         st.markdown("---")
         
-        # ===== 生成精美下载图片 =====
+        # ===== 生成下载图片（纯文字版，无emoji）=====
         from PIL import Image, ImageDraw, ImageFont
-        import io, os
+        import io, os, traceback
         
-        W, H = 750, 1050
-        img = Image.new('RGB', (W, H), '#F8FAFC')
-        draw = ImageDraw.Draw(img)
+        try:
+            W, H = 750, 1050
+            img = Image.new('RGB', (W, H), '#F8FAFC')
+            draw = ImageDraw.Draw(img)
+            
+            font_paths = ['/System/Library/Fonts/PingFang.ttc','/System/Library/Fonts/STHeiti Light.ttc','/System/Library/Fonts/Hiragino Sans GB.ttc']
+            f_title = f_h1 = f_h2 = f_body = f_small = f_big = None
+            for fp in font_paths:
+                if os.path.exists(fp):
+                    try:
+                        f_title = ImageFont.truetype(fp, 36)
+                        f_h1 = ImageFont.truetype(fp, 26)
+                        f_h2 = ImageFont.truetype(fp, 22)
+                        f_body = ImageFont.truetype(fp, 18)
+                        f_small = ImageFont.truetype(fp, 14)
+                        f_big = ImageFont.truetype(fp, 44)
+                        break
+                    except: pass
+            if not f_body:
+                f_title = f_h1 = f_h2 = f_body = f_small = f_big = ImageFont.load_default()
+            
+            def card(x, y, w, title, value, color):
+                draw.rounded_rectangle([x, y, x+w, y+80], 10, fill='#FFFFFF', outline='#E2E8F0', width=1)
+                draw.text((x+w/2, y+16), title, fill='#64748B', font=f_small, anchor='mt')
+                draw.text((x+w/2, y+44), str(value), fill=color, font=f_h1, anchor='mt')
+            
+            y = 0
+            draw.rectangle([0, 0, W, 90], fill='#165DFF')
+            draw.text((W/2, 45), '北京房产投资测评报告', fill='#FFFFFF', font=f_title, anchor='mm')
+            y = 110
+            
+            # 房源信息
+            draw.rounded_rectangle([30, y, W-30, y+110], 12, fill='#FFFFFF', outline='#E2E8F0', width=1)
+            draw.text((55, y+18), '[房源基础信息]', fill='#1E293B', font=f_h2)
+            info = [
+                '小区：{}         区域：{}'.format(d.get('community', '未命名'), d.get('district', '未知')),
+                '总价：{} 万元         面积：{} m2         户型：{}'.format(d.get('total_price', 0), d.get('area', 0), d.get('house_type', '未知')),
+            ]
+            for j, line in enumerate(info):
+                draw.text((55, y+48+j*24), line, fill='#475569', font=f_body)
+            y += 130
+            
+            # 评分
+            score_text = '{}  综合评分 {} 分  |  {}'.format(d['star'], d['total_score'], d['rank'])
+            draw.text((W/2, y), score_text, fill='#165DFF', font=f_big, anchor='mt')
+            y += 55
+            
+            # 核心指标 2x2
+            card_x, card_w = [38, 386], 326
+            metrics = [
+                ('IRR年化收益率', '{}%'.format(d['irr']), '#059669'),
+                ('总净收益', '{} 万元'.format(d['profit']), '#2563EB'),
+                ('每月净现金流', '{} 元'.format(d['month_cash']), '#7C3AED'),
+                ('回本周期', str(d['payback']), '#D97706'),
+            ]
+            for i, (label, value, color) in enumerate(metrics):
+                card(card_x[i % 2], y + (i // 2) * 92, card_w, label, value, color)
+            y += 200
+            
+            # AI总结
+            draw.rounded_rectangle([30, y, W-30, y+155], 12, fill='#FFFFFF', outline='#E2E8F0', width=1)
+            draw.text((55, y+18), '[AI专业总结]', fill='#1E293B', font=f_h2)
+            draw.text((55, y+46), d.get('ai_one', '')[:80], fill='#475569', font=f_body)
+            draw.text((55, y+78), '核心优势：{}'.format(d.get('good', '')[:60]), fill='#059669', font=f_body)
+            draw.text((55, y+104), '主要风险：{}'.format(d.get('risk', '')[:60]), fill='#DC2626', font=f_body)
+            draw.text((55, y+130), '建议持有：{}'.format(d.get('hold_period', '')), fill='#64748B', font=f_small)
+            y += 175
+            
+            draw.line([30, y, W-30, y], fill='#E2E8F0', width=1)
+            draw.text((W/2, y+20), '房地产投资评估模型 · 客观中立 仅供参考', fill='#9CA3AF', font=f_small, anchor='mt')
+            
+            buf = io.BytesIO()
+            img.save(buf, format='PNG')
+            img_data = buf.getvalue()
+        except Exception as e:
+            img_data = None
+            err_msg = traceback.format_exc()
         
-        # 字体
-        font_paths = ['/System/Library/Fonts/PingFang.ttc','/System/Library/Fonts/STHeiti Light.ttc','/System/Library/Fonts/Hiragino Sans GB.ttc']
-        f_title = f_h1 = f_h2 = f_body = f_small = None
-        for fp in font_paths:
-            if os.path.exists(fp):
-                try:
-                    f_title = ImageFont.truetype(fp, 36)
-                    f_h1 = ImageFont.truetype(fp, 26)
-                    f_h2 = ImageFont.truetype(fp, 22)
-                    f_body = ImageFont.truetype(fp, 18)
-                    f_small = ImageFont.truetype(fp, 14)
-                    f_big = ImageFont.truetype(fp, 44)
-                    break
-                except: pass
-        if not f_body:
-            f_title = f_h1 = f_h2 = f_body = f_small = f_big = ImageFont.load_default()
-        
-        def card(x, y, w, title, value, color, subtitle=''):
-            """绘制指标卡片"""
-            draw.rounded_rectangle([x, y, x+w, y+80], 10, fill='#FFFFFF', outline='#E2E8F0', width=1)
-            draw.text((x+w/2, y+18), title, fill='#64748B', font=f_small, anchor='mt')
-            draw.text((x+w/2, y+42), str(value), fill=color, font=f_h1, anchor='mt')
-            if subtitle:
-                draw.text((x+w/2, y+66), subtitle, fill='#94A3B8', font=f_small, anchor='mt')
-        
-        y = 0
-        # 顶部蓝色横幅
-        draw.rectangle([0, 0, W, 90], fill='#165DFF')
-        draw.text((W/2, 45), '🏠 北京房产投资测评报告', fill='#FFFFFF', font=f_title, anchor='mm')
-        y = 110
-        
-        # 房源信息卡片
-        draw.rounded_rectangle([30, y, W-30, y+110], 12, fill='#FFFFFF', outline='#E2E8F0', width=1)
-        draw.text((55, y+18), '📋 房源基础信息', fill='#1E293B', font=f_h2)
-        info = [
-            f"小区：{d.get('community', '未命名')}         区域：{d.get('district', '未知')}",
-            f"总价：{d.get('total_price', 0)} 万元         面积：{d.get('area', 0)} ㎡         户型：{d.get('house_type', '未知')}",
-        ]
-        for j, line in enumerate(info):
-            draw.text((55, y+48+j*24), line, fill='#475569', font=f_body)
-        y += 130
-        
-        # 评分条
-        score_text = f"{d['star']}  综合评分 {d['total_score']} 分  |  {d['rank']}"
-        draw.text((W/2, y), score_text, fill='#165DFF', font=f_big, anchor='mt')
-        y += 50
-        
-        # 核心指标卡片 2x2
-        card_x = [38, 386]
-        card_w = 326
-        metrics = [
-            ('IRR年化收益率', f"{d['irr']}%", '#059669'),
-            ('总净收益', f"{d['profit']} 万元", '#2563EB'),
-            ('每月净现金流', f"{d['month_cash']} 元", '#7C3AED'),
-            ('回本周期', str(d['payback']), '#D97706'),
-        ]
-        for i, (label, value, color) in enumerate(metrics):
-            cx = card_x[i % 2]
-            cy = y + (i // 2) * 92
-            card(cx, cy, card_w, label, value, color)
-        y += 200
-        
-        # AI总结
-        draw.rounded_rectangle([30, y, W-30, y+155], 12, fill='#FFFFFF', outline='#E2E8F0', width=1)
-        draw.text((55, y+18), '💡 AI专业总结', fill='#1E293B', font=f_h2)
-        draw.text((55, y+48), d.get('ai_one', '')[:80], fill='#475569', font=f_body)
-        draw.text((55, y+78), f"✅ {d.get('good', '')[:60]}", fill='#059669', font=f_body)
-        draw.text((55, y+104), f"⚠️ {d.get('risk', '')[:60]}", fill='#DC2626', font=f_body)
-        draw.text((55, y+130), f"📅 建议持有：{d.get('hold_period', '')}", fill='#64748B', font=f_small)
-        y += 180
-        
-        # 底部
-        draw.line([30, y, W-30, y], fill='#E2E8F0', width=1)
-        draw.text((W/2, y+20), '房地产投资评估模型 · 客观中立 仅供参考', fill='#9CA3AF', font=f_small, anchor='mt')
-        
-        buf = io.BytesIO()
-        img.save(buf, format='PNG')
-        
-        st.download_button(
-            label='📥 下载海报图片',
-            data=buf.getvalue(),
-            file_name='房产投资测评海报.png',
-            mime='image/png',
-            use_container_width=True
-        )
+        if img_data:
+            st.download_button(
+                label='📥 下载海报图片',
+                data=img_data,
+                file_name='房产投资测评海报.png',
+                mime='image/png',
+                use_container_width=True
+            )
+        else:
+            st.error(f'图片生成失败：{err_msg[:200]}')
     
     show_poster()
 # 生成基金级报告（章节编号唯一+完整逻辑）
