@@ -71,19 +71,32 @@ is_client = mode == "🏠 客户评估模式"
 
 if is_client:
 
-    # 侧边栏：房源输入
     with st.sidebar:
         st.caption("👤 当前：客户评估模式")
     params = render_sidebar_v2()
 
-    # 顶部操作按钮
+    # 使用流程提示
+    st.markdown("""
+    <div style="display:flex;gap:12px;align-items:center;background:#F0F7FF;border-radius:8px;padding:12px 20px;margin-bottom:12px">
+        <div style="background:#2563EB;color:#fff;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700">1</div>
+        <span style="font-size:13px;color:#475569">填写房源信息</span>
+        <span style="color:#CBD5E1">→</span>
+        <div style="background:#2563EB;color:#fff;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700">2</div>
+        <span style="font-size:13px;color:#475569">点击生成评估报告</span>
+        <span style="color:#CBD5E1">→</span>
+        <div style="background:#2563EB;color:#fff;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700">3</div>
+        <span style="font-size:13px;color:#475569">查看估值结论与专业报告</span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # 顶部操作区
     col_b1, col_b2, col_b3 = st.columns([2, 1, 1])
     with col_b1:
-        calc_btn = st.button("📊 开始评估", type="primary", use_container_width=True)
+        eval_btn = st.button("📊 生成评估报告", type="primary", use_container_width=True)
     with col_b2:
         poster_btn = st.button("🖼️ 生成海报", use_container_width=True)
     with col_b3:
-        report_btn = st.button("📄 完整报告", use_container_width=True)
+        report_btn = st.button("📄 专业报告", use_container_width=True)
 
     st.divider()
 
@@ -96,28 +109,28 @@ if is_client:
         render_client_input(params)
 
     with t_overview:
-        if calc_btn:
+        if eval_btn:
             render_client_overview(params)
         else:
-            st.info("👈 填写房源参数后，点击「📊 开始评估」查看总览结论")
+            st.info("👈 填写房源参数后，点击「📊 生成评估报告」查看总览结论")
 
     with t_valuation:
-        if calc_btn:
+        if eval_btn:
             render_client_valuation(params)
         else:
-            st.info("👈 点击「📊 开始评估」查看估值分析")
+            st.info("👈 点击「📊 生成评估报告」查看估值分析")
 
     with t_invest:
-        if calc_btn:
+        if eval_btn:
             render_client_investment(params)
         else:
-            st.info("👈 点击「📊 开始评估」查看投资测算")
+            st.info("👈 点击「📊 生成评估报告」查看投资测算")
 
     with t_risk:
-        if calc_btn:
+        if eval_btn:
             render_client_risk(params)
         else:
-            st.info("👈 点击「📊 开始评估」查看风险分析")
+            st.info("👈 点击「📊 生成评估报告」查看风险分析")
 
     with t_report:
         render_client_report(params)
