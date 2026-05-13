@@ -2371,11 +2371,12 @@ def render_client_input(params):
     import time
 
     # 模式切换
-    if "input_mode" not in st.session_state:
+    if st.session_state.get("input_mode") not in ["fast", "professional"]:
         st.session_state["input_mode"] = "fast"
-    mode = st.radio("方式", ["📱 快速评估", "🖥️ 专业模式"], horizontal=True,
-                    key="input_mode", label_visibility="collapsed")
-    is_fast = mode == "📱 快速评估"
+    mode = st.radio("方式", ["fast", "professional"],
+                    format_func=lambda x: "📱 快速评估" if x == "fast" else "🖥️ 专业模式",
+                    horizontal=True, key="input_mode", label_visibility="collapsed")
+    is_fast = (st.session_state.get("input_mode") == "fast")
 
     if not is_fast:
         _render_desktop_input()
@@ -2407,17 +2408,14 @@ def render_client_input(params):
     # ── 报告类型 ──
     st.divider()
     st.caption("选择报告类型")
-    if "report_type" not in st.session_state:
+    if st.session_state.get("report_type") not in ["simple", "detailed", "fund"]:
         st.session_state["report_type"] = "simple"
-    rt = st.radio("报告类型", [
-        "📱 简单版 — 30秒看懂值不值得买",
-        "📊 详细版 — 全面分析为什么好/不好",
-        "🏦 基金级 — 研究院级专业评估"
-    ], key="report_type_selector", label_visibility="collapsed",
-    index={"simple":0,"detailed":1,"fund":2}.get(st.session_state.get("report_type","simple"),0))
-    if "简单版" in rt: st.session_state["report_type"] = "simple"
-    elif "详细版" in rt: st.session_state["report_type"] = "detailed"
-    else: st.session_state["report_type"] = "fund"
+    rt = st.radio("报告类型", ["simple", "detailed", "fund"],
+        format_func=lambda x: {"simple":"📱 简单版 — 30秒看懂值不值得买",
+                               "detailed":"📊 详细版 — 全面分析为什么好/不好",
+                               "fund":"🏦 基金级 — 研究院级专业评估"}[x],
+        key="report_type", label_visibility="collapsed",
+        index={"simple":0,"detailed":1,"fund":2}.get(st.session_state.get("report_type","simple"),0))
 
     # ── 高级调整（折叠）──
     with st.expander("⚙️ 高级调整（可选）"):
