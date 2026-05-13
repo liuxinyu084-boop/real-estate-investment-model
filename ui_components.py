@@ -1338,3 +1338,454 @@ def _render_action_advice(result, p):
 
     for icon_title, desc in advice[:6]:
         st.markdown(f"**{icon_title}**：{desc}")
+
+# ══════════════════════════════════════════════════════════════
+#  V6 重构：侧边栏 + 6 标签页
+# ══════════════════════════════════════════════════════════════
+
+def _get_val_params():
+    """从 session_state 构建估值引擎输入参数"""
+    tp = st.session_state.get("total_price", 500)
+    ar = max(st.session_state.get("area", 90), 1)
+    p = {
+        "community_avg_price": int(tp * 10000 / ar),
+        "area": ar,
+        "asking_price": tp,
+        "district": st.session_state.get("district", "朝阳"),
+        "property_type": st.session_state.get("property_type", "商品房"),
+        "house_age": st.session_state.get("house_age", 5),
+        "floor_type": st.session_state.get("floor_type", "中楼层"),
+        "orientation_type": _map_orientation(st.session_state.get("orientation_defect", "无")),
+        "subway_distance": st.session_state.get("subway_distance", "1公里内"),
+        "school_level": st.session_state.get("school_level", "普通学区"),
+        "property_management_level": st.session_state.get("property_level", "普通"),
+        "liquidity_level": "一般",
+        "decoration_level": st.session_state.get("decoration_level", "简装"),
+        "plot_ratio": st.session_state.get("volume_rate", 2.5),
+        "green_ratio": st.session_state.get("green_rate", 30),
+        "parking_ratio": _map_parking(st.session_state.get("parking_ratio", "1:1")),
+        "mall_distance": st.session_state.get("mall_distance", "2公里内"),
+        "hospital_distance": st.session_state.get("hospital_distance", "2公里内"),
+        "is_two_years": st.session_state.get("is_full2", True),
+        "is_five_unique": st.session_state.get("is_full5_only", False),
+        "layout_defect": st.session_state.get("layout_defect", "无"),
+        "building_defect": st.session_state.get("building_defect", "无"),
+        "hard_defect": st.session_state.get("hard_defect", "无"),
+        "liquidity_pressure_level": "一般",
+    }
+    if st.session_state.get("is_school", False):
+        p["school_level"] = st.session_state.get("school_level", "区重点")
+    return p
+
+
+def render_sidebar_v2():
+    """V6 重构侧边栏——统一输入"""
+    st.sidebar.title("🏠 房源参数")
+    init_saves()
+
+    with st.sidebar.expander("📋 基础信息", expanded=True):
+        st.text_input("小区名称", key="community")
+        st.selectbox("行政区", ["东城","西城","朝阳","海淀","丰台","石景山","通州","昌平","顺义","大兴","房山","其他"], key="district")
+        col_a1, col_a2 = st.columns(2)
+        col_a1.number_input("总价(万元)", 50, 5000, 500, key="total_price")
+        col_a2.number_input("面积(㎡)", 20, 500, 90, key="area")
+        st.number_input("房龄(年)", 0, 70, 5, key="house_age")
+        col_h1, col_h2 = st.columns(2)
+        col_h1.selectbox("户型", ["1室1厅","2室1厅","2室2厅","3室1厅","3室2厅","4室及以上"], key="house_type_layout")
+        col_h2.selectbox("楼层", ["低楼层","中楼层","高楼层","顶层"], key="floor_type")
+        st.selectbox("房产属性", ["商品房","已购公房","回迁房","经济适用房","商住两用"], key="property_type")
+        st.checkbox("满二", True, key="is_full2")
+        st.checkbox("满五唯一", False, key="is_full5_only")
+
+    with st.sidebar.expander("💰 贷款参数", expanded=False):
+        st.selectbox("贷款类型", ["不贷款","纯商业贷款","公积金+商业组合"], key="loan_type")
+        if st.session_state.get("loan_type", "不贷款") != "不贷款":
+            st.checkbox("首套房", True, key="is_first")
+            st.slider("贷款比例(%)", 0, 85, 65, 5, key="loan_ratio")
+            st.slider("贷款年限", 5, 30, 30, key="loan_years")
+            st.selectbox("还款方式", ["等额本息","等额本金"], key="repay_type")
+            if st.session_state.get("loan_type") == "纯商业贷款":
+                st.number_input("商贷利率(%)", 2.5, 8.0, 3.8, key="loan_rate")
+            if st.session_state.get("loan_type") == "公积金+商业组合":
+                st.number_input("公积金额度(万元)", 0, 200, 0, 10, key="gjj_amount")
+                st.number_input("公积金利率(%)", 2.5, 5.0, 3.1, key="gjj_rate")
+                st.number_input("商贷利率(%)", 2.5, 8.0, 3.8, key="bank_rate")
+
+    with st.sidebar.expander("💵 租金/持有", expanded=False):
+        st.number_input("月租金(元)", 500, 100000, 5000, key="monthly_rent")
+        st.slider("空置率(%)", 0, 50, 5, key="vacancy_rate")
+        st.number_input("物业费(元/㎡/月)", 0.5, 30.0, 6.0, key="property_fee_month")
+        st.number_input("供暖费(元/㎡/年)", 15.0, 60.0, 30.0, key="heat_fee_year")
+        st.number_input("年维修费(元)", 0, 50000, 5000, key="repair_year")
+        col_f1, col_f2 = st.columns(2)
+        col_f1.number_input("买家费率", 0.01, 0.05, 0.02, key="buy_agent_rate")
+        col_f2.number_input("卖家费率", 0.01, 0.03, 0.02, key="sell_agent_rate")
+        st.number_input("装修费(元)", 0, 1000000, 0, key="decorate_fee")
+        st.number_input("家具家电(元)", 0, 500000, 0, key="furniture_fee")
+
+    with st.sidebar.expander("🔍 微观参数", expanded=False):
+        st.selectbox("朝向缺陷", ["无","东西向","北向","西北/东北"], key="orientation_defect")
+        st.selectbox("户型缺陷", ["无","暗卫","暗厅","过道长","异形","无阳台"], key="layout_defect")
+        st.selectbox("楼栋缺陷", ["无","低楼层遮挡","顶层漏水","西晒","临街","高架/铁路","垃圾站旁"], key="building_defect")
+        st.selectbox("硬伤", ["无","有抵押","有查封","共有产权","商住两用","凶宅/非正常死亡"], key="hard_defect")
+        st.selectbox("装修程度", ["豪装","精装","简装","毛坯"], key="decoration_level")
+        st.selectbox("物业水平", ["顶级","优质","普通","较差"], key="property_level")
+        st.selectbox("车位配比", ["1:2以上","1:1.5","1:1","1:0.8","1:0.5以下"], key="parking_ratio")
+        st.checkbox("学区房", False, key="is_school")
+        if st.session_state.get("is_school"):
+            st.selectbox("学区等级", ["普通学区","区重点","市重点","顶尖名校"], key="school_level")
+        st.selectbox("地铁距离", ["500米内","1公里内","2公里内","2公里外"], key="subway_distance")
+        st.selectbox("商场距离", ["1公里内","2公里内","2公里外"], key="mall_distance")
+        st.selectbox("医院距离", ["1公里内","2公里内","2公里外"], key="hospital_distance")
+        st.number_input("绿化率(%)", 0, 80, 30, key="green_rate")
+        st.number_input("容积率", 0.1, 5.0, 2.5, key="volume_rate")
+
+    with st.sidebar.expander("📈 持有假设", expanded=False):
+        st.number_input("持有年限", 1, 50, 10, key="hold_years")
+        st.number_input("房价年涨幅(%)", -10.0, 15.0, 3.0, key="price_growth")
+        st.number_input("租金年涨幅(%)", -5.0, 10.0, 2.0, key="rent_growth")
+        st.number_input("人口增长(%)", -5.0, 10.0, 1.0, key="population_growth")
+        st.number_input("GDP增长(%)", -5.0, 15.0, 5.2, key="gdp_growth")
+        st.number_input("区域空置(%)", 0, 50, 5, key="regional_vacancy")
+
+    # 房源管理
+    st.sidebar.divider()
+    st.sidebar.subheader("📂 房源管理")
+    house_list = list(st.session_state.house_saves.keys())
+    if house_list:
+        col_s1, col_s2 = st.sidebar.columns([3, 1])
+        selected = col_s1.selectbox("已保存", [""] + house_list, key="saved_house_selector", label_visibility="collapsed")
+        if selected and col_s2.button("📂", key="sidebar_load_btn"):
+            msg = load_house(selected)
+            st.sidebar.success(msg)
+    col_save1, col_save2 = st.sidebar.columns(2)
+    save_name = col_save1.text_input("名称", key="sidebar_save_name", placeholder="保存为...")
+    if col_save2.button("💾", key="sidebar_save_btn") and save_name:
+        msg = save_current_house(save_name)
+        st.sidebar.success(msg)
+
+    return {}
+
+
+# ═══════════ Tab A: 总览结论 ═══════════
+
+def render_tab_overview(params):
+    """总览——AI结论 + 估值卡片 + 建议 + 3价"""
+    from valuation import calculate_property_valuation
+    from dataset_analysis import compute_confidence_score
+    from transaction_dataset import load_dataset
+    import os
+
+    p = _get_val_params()
+    result = calculate_property_valuation(p)
+    ds = load_dataset() if os.path.exists("transaction_dataset.json") else []
+    conf = compute_confidence_score(ds, result.get("asset_type")) if ds else {"grade": "C"}
+
+    # 顾问结论
+    _render_advisor_conclusion(result, conf, p)
+
+    st.divider()
+
+    # 估值结论卡片
+    icon = result["level_icon"]; level = result["valuation_level"]
+    bg = "#ECFDF5" if "低估" in level else "#FEF2F2" if "高估" in level else "#F0F7FF"
+    st.markdown(f"""<div style="background:{bg};border-radius:12px;padding:20px;text-align:center;margin:10px 0">
+        <div style="font-size:48px">{icon}</div>
+        <div style="font-size:28px;font-weight:800;color:#1E293B">{level}</div>
+        <div style="font-size:14px;color:#64748B;margin-top:8px">{result['asset_name']} · 可信度 {conf['grade']} 级</div>
+    </div>""", unsafe_allow_html=True)
+
+    # 建议动作
+    st.subheader("🎯 建议动作")
+    _render_action_advice(result, p)
+
+    # 三价
+    st.subheader("💰 三价对比")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("挂牌价", f"{result['asking_price']:.0f}万")
+    c2.metric("模型估值", f"{result['final_model_value']:.0f}万", delta=f"{result['safety_margin']:+.1%}")
+    c3.metric("预测成交价", f"{result['estimated_final_transaction_price']:.0f}万")
+
+    # 适合人群
+    _render_suitable_buyers(result, p)
+    st.divider()
+    # 风险摘要
+    st.subheader("⚠️ 核心风险")
+    _render_risk_warnings(result, p)
+
+
+# ═══════════ Tab B: 估值分析 ═══════════
+
+def render_tab_valuation(params):
+    """估值分析——完整因子加减分"""
+    from valuation import calculate_property_valuation
+    import os
+
+    p = _get_val_params()
+    result = calculate_property_valuation(p)
+
+    # 核心指标
+    st.subheader("📊 估值指标")
+    m1, m2, m3, m4, m5, m6 = st.columns(6)
+    m1.metric("安全边际", f"{result['safety_margin']:+.1%}")
+    m2.metric("微观评分", f"{result['micro_unit_score']}/100")
+    m3.metric("流动性", f"{result['liquidity_score']}/100")
+    m4.metric("参考价", f"{result['market_reference_value']:.0f}万")
+    m5.metric("模型估值", f"{result['final_model_value']:.0f}万")
+    m6.metric("议价空间", f"{result['predicted_negotiation_range'][0]:.0%}~{result['predicted_negotiation_range'][1]:.0%}")
+
+    st.divider()
+    # 加减分
+    _render_factors_human(result)
+
+    st.divider()
+    # 资产类型
+    st.subheader("🏷️ 资产类型")
+    st.info(f"**{result['asset_name']}** — {result['asset_features']}")
+    if result.get("activated_rules"):
+        st.caption("规则： " + ", ".join(result["activated_rules"]))
+
+    # 流动性
+    st.subheader("💧 流动性")
+    lq = result["liquidity_score"]
+    if lq >= 70: diff = "容易出手"
+    elif lq >= 50: diff = "正常周转"
+    elif lq >= 30: diff = "有难度"
+    else: diff = "难出手"
+    c1, c2 = st.columns(2)
+    c1.metric("成交难度", diff)
+    c2.metric("评分", f"{lq}/100")
+
+
+# ═══════════ Tab C: 投资测算 ═══════════
+
+def render_tab_investment(params):
+    """投资测算——调用原有 calc 系列"""
+    st.subheader("📈 投资回报测算")
+
+    # 复用原有计算逻辑
+    from calculations import (
+        calc_loan_equal_principal_interest, calc_loan_equal_principal,
+        calc_buy_cost, calc_hold_cash, calc_sell_profit,
+        calc_professional_metrics, stress_test, calc_quantitative_score,
+        get_school_premium, get_amenity_premium, get_defect_discount, make_radar
+    )
+
+    tp = st.session_state.get("total_price", 500) * 10000
+    area = st.session_state.get("area", 90)
+    age = st.session_state.get("house_age", 5)
+    hy = st.session_state.get("hold_years", 10)
+    rent = st.session_state.get("monthly_rent", 5000)
+    vacancy = st.session_state.get("vacancy_rate", 5)
+    lt = st.session_state.get("loan_type", "不贷款")
+    lr = st.session_state.get("loan_ratio", 65)
+    ly = st.session_state.get("loan_years", 30)
+    rp = st.session_state.get("repay_type", "等额本息")
+
+    # 贷款计算
+    loan_amt = 0; monthly_mortgage = 0; total_interest = 0
+    if lt == "纯商业贷款":
+        loan_amt = tp * lr / 100
+        rate = st.session_state.get("loan_rate", 3.8)
+        res = calc_loan_equal_principal_interest(loan_amt, ly, rate) if rp == "等额本息" else calc_loan_equal_principal(loan_amt, ly, rate)
+        monthly_mortgage = res["monthly_pay"]
+        total_interest = res["total_interest"]
+    elif lt == "公积金+商业组合":
+        gjj = st.session_state.get("gjj_amount", 0) * 10000
+        bank = tp * lr / 100 - gjj
+        from calculations import calc_combined_loan
+        res = calc_combined_loan(gjj, ly, st.session_state.get("gjj_rate", 3.1), bank, ly, st.session_state.get("bank_rate", 3.8), rp)
+        monthly_mortgage = res["total_monthly"]
+        total_interest = res["total_interest"]
+
+    # 核心指标
+    own_money = tp - loan_amt
+    # 买入成本
+    buy = calc_buy_cost(tp, area, st.session_state.get("is_first", True),
+                        st.session_state.get("buy_agent_rate", 0.02), 0, 0,
+                        st.session_state.get("decorate_fee", 0),
+                        st.session_state.get("furniture_fee", 0), loan_amt)
+    input_money = buy["真实总投入"]
+    # 持有期现金流
+    cash_flows = []
+    for y in range(hy):
+        hold = calc_hold_cash(area, st.session_state.get("property_fee_month", 6.0),
+                              st.session_state.get("heat_fee_year", 30.0),
+                              st.session_state.get("repair_year", 5000),
+                              rent, vacancy, monthly_mortgage,
+                              st.session_state.get("rent_growth", 2.0), y)
+        cash_flows.append(hold["年净现金流"])
+    # 卖出
+    school_p = get_school_premium(st.session_state.get("is_school", False),
+                                  st.session_state.get("school_level", "普通学区"),
+                                  st.session_state.get("school_certainty", "多校划片(中等概率)"),
+                                  st.session_state.get("school_type", "小学"))
+    amenity_p = get_amenity_premium(st.session_state.get("subway_distance", "1公里内"),
+                                    st.session_state.get("hospital_distance", "1公里内"),
+                                    st.session_state.get("mall_distance", "1公里内"))
+    defect_d = get_defect_discount(st.session_state.get("orientation_defect", "无"),
+                                   st.session_state.get("layout_defect", "无"),
+                                   st.session_state.get("building_defect", "无"),
+                                   st.session_state.get("hard_defect", "无"))
+    sell = calc_sell_profit(tp, hy, st.session_state.get("price_growth", 3.0), 0,
+                            st.session_state.get("sell_agent_rate", 0.02),
+                            st.session_state.get("is_full2", True),
+                            st.session_state.get("is_full5_only", False),
+                            input_money, school_p, amenity_p, defect_d)
+    profit = sell["总净利润"]
+    first_yr_noi = cash_flows[0] + monthly_mortgage * 12 if cash_flows else 0
+    metrics = calc_professional_metrics(input_money, profit, cash_flows, hy, rent, tp, first_yr_noi, monthly_mortgage)
+
+    col_i1, col_i2, col_i3, col_i4 = st.columns(4)
+    col_i1.metric("IRR", f"{metrics['IRR年化收益率']}%")
+    col_i2.metric("ROI", f"{metrics['年化ROI']}%")
+    col_i3.metric("月净现金流", f"{cash_flows[0]//12:.0f}元" if cash_flows else "—")
+    col_i4.metric("总净利润", f"{profit/10000:.1f}万")
+
+    col_i5, col_i6, col_i7, col_i8 = st.columns(4)
+    col_i5.metric("租售比", f"{metrics['租售比(%)']}%")
+    col_i6.metric("资本化率", f"{metrics['资本化率(%)']}%")
+    col_i7.metric("回本周期", f"{metrics['静态回本周期(年)']}年")
+    col_i8.metric("总回报倍数", f"{metrics['总回报倍数']}x")
+
+    st.divider()
+    st.subheader("💰 贷款成本")
+    if monthly_mortgage > 0:
+        c_l1, c_l2 = st.columns(2)
+        c_l1.metric("月供", f"{monthly_mortgage:.0f}元")
+        c_l2.metric("总利息", f"{total_interest/10000:.1f}万元")
+
+    # 持有期现金流表
+    if cash_flows:
+        st.subheader("📅 持有期年现金流")
+        cf_data = [{"年份": i+1, "年净现金流(元)": f"{cf:,.0f}"} for i, cf in enumerate(cash_flows[:10])]
+        st.dataframe(pd.DataFrame(cf_data), hide_index=True, use_container_width=True)
+
+
+# ═══════════ Tab D: 风险分析 ═══════════
+
+def render_tab_risk(params):
+    """风险分析"""
+    from valuation import calculate_property_valuation
+    import os
+
+    p = _get_val_params()
+    result = calculate_property_valuation(p)
+
+    # 估值风险
+    st.subheader("⚠️ 估值风险")
+    _render_risk_warnings(result, p)
+
+    st.divider()
+
+    # 压力测试
+    st.subheader("📉 压力测试")
+    from calculations import stress_test, calc_hold_cash, calc_sell_profit, calc_professional_metrics, get_school_premium, get_amenity_premium, get_defect_discount
+    tp = p["asking_price"] * 10000
+    area = p["area"]
+    hy = st.session_state.get("hold_years", 10)
+    rent = st.session_state.get("monthly_rent", 5000)
+    vacancy = st.session_state.get("vacancy_rate", 5)
+    input_money = tp * 0.35
+    monthly_mortgage = 0
+    if st.session_state.get("loan_type", "不贷款") != "不贷款":
+        monthly_mortgage = tp * st.session_state.get("loan_ratio", 65) / 100 * 0.004
+    sp = get_school_premium(st.session_state.get("is_school", False), st.session_state.get("school_level", "普通学区"),
+                            st.session_state.get("school_certainty", "多校划片(中等概率)"), st.session_state.get("school_type", "小学"))
+    ap = get_amenity_premium(st.session_state.get("subway_distance", "1公里内"), st.session_state.get("hospital_distance", "1公里内"), st.session_state.get("mall_distance", "1公里内"))
+    dd = get_defect_discount(st.session_state.get("orientation_defect", "无"), st.session_state.get("layout_defect", "无"),
+                             st.session_state.get("building_defect", "无"), st.session_state.get("hard_defect", "无"))
+
+    try:
+        stress = stress_test(tp, hy, monthly_mortgage, input_money, rent, area,
+                            st.session_state.get("property_fee_month", 6.0), st.session_state.get("heat_fee_year", 30.0),
+                            st.session_state.get("repair_year", 5000), vacancy, st.session_state.get("price_growth", 3.0),
+                            st.session_state.get("rent_growth", 2.0), sp, ap, dd)
+        st.dataframe(stress, hide_index=True, use_container_width=True)
+    except Exception:
+        st.caption("数据不足，无法生成压力测试。请填写更多参数。")
+
+    # 资产类型风险
+    st.divider()
+    st.subheader("🏷️ 资产类型风险")
+    st.info(f"类型：**{result['asset_name']}** — {result['asset_features']}")
+
+
+# ═══════════ Tab E: 专业报告 ═══════════
+
+_msg_e = ""
+
+def render_tab_report(params):
+    """专业报告"""
+    global _msg_e
+    if not _msg_e:
+        _msg_e = "👈 点击上方「📄 完整报告」按钮生成。报告将包含执行摘要、因子详解、方案对比等完整分析。"
+    st.info(_msg_e)
+
+
+# ═══════════ Tab F: 高级模式 ═══════════
+
+_msg_f = ""
+
+def render_tab_advanced(params):
+    """高级模式"""
+    global _msg_f
+    st.subheader("🔧 高级模式")
+
+    pw = st.text_input("管理员密码", type="password", key="admin_pw")
+    if pw != "fangchan2024":
+        if pw:
+            st.error("密码错误")
+        st.caption("此区域仅供专业用户/管理员查看模型调试信息")
+        return
+
+    st.success("✅ 已解锁高级模式")
+    from valuation import calculate_property_valuation, DEFAULT_WEIGHTS
+    import os
+
+    p = _get_val_params()
+    result = calculate_property_valuation(p)
+
+    tab_a1, tab_a2, tab_a3 = st.tabs(["模型参数", "因子明细", "数据质量"])
+
+    with tab_a1:
+        st.subheader("估值模型参数")
+        st.json({
+            "asset_type": result["asset_name"],
+            "individual_adj": result["individual_adjustment"],
+            "macro_adj": result["macro_adjustment"],
+            "liquidity_adj": result["liquidity_adjustment"],
+            "asset_adj": result.get("asset_adjustment", 0),
+            "total_adj": result["total_adjustment"],
+            "micro_unit_score": result["micro_unit_score"],
+            "liquidity_score": result["liquidity_score"],
+            "default_weights": DEFAULT_WEIGHTS,
+            "activated_rules": result.get("activated_rules", []),
+            "disabled_rules": result.get("disabled_rules", []),
+        })
+
+    with tab_a2:
+        st.subheader("全因子明细")
+        all_d = result.get("core_details", []) + result.get("macro_details", []) + result.get("liquidity_details", [])
+        st.dataframe(pd.DataFrame(all_d), hide_index=True, use_container_width=True, column_order=["factor_name","value","adjustment","category"])
+
+    with tab_a3:
+        st.subheader("数据质量")
+        try:
+            from data_quality_system import data_health_report, coverage_analysis
+            from transaction_dataset import load_dataset
+            ds = load_dataset()
+            if ds:
+                health = data_health_report(ds)
+                cov = coverage_analysis(ds)
+                st.metric("样本总数", health["total"])
+                st.metric("高质量占比", f"{health['high_quality_pct']}%")
+                st.write("区域覆盖:", cov["total_districts_covered"], "/12")
+                st.write("资产类型覆盖:", cov["total_asset_types_covered"], "/7")
+            else:
+                st.caption("暂无数据")
+        except Exception as e:
+            st.caption(f"数据质量模块未加载: {e}")
+
+    if not _msg_f:
+        _msg_f = "高级模式已解锁"
