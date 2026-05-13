@@ -1,8 +1,7 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║  看房AI Book                                               ║
-║  北京房产估值与投资决策系统  V6.0                           ║
-║  Beijing Property Valuation & Investment Decision System   ║
+║  看房AI Book — 专业房产评估与购房决策系统                    ║
+║  Beijing Property Intelligence Platform                    ║
 ╚══════════════════════════════════════════════════════════════╝
 """
 
@@ -10,125 +9,151 @@ import streamlit as st
 from ui_components import (
     set_global_style,
     render_sidebar_v2,
-    render_tab_overview,
-    render_tab_valuation,
-    render_tab_investment,
-    render_tab_risk,
-    render_tab_report,
-    render_tab_advanced,
+    # Client mode tabs
+    render_client_input,
+    render_client_overview,
+    render_client_valuation,
+    render_client_investment,
+    render_client_risk,
+    render_client_report,
+    # Admin mode tabs
+    render_admin_database,
+    render_admin_samples,
+    render_admin_import,
+    render_admin_params,
+    render_admin_quality,
+    render_admin_dashboard,
+    # Legacy
     render_poster,
     render_report,
 )
 
-# ══════════════════════════════════════════════════════════════
-#  页面配置
-# ══════════════════════════════════════════════════════════════
-
 set_global_style()
 
 # ══════════════════════════════════════════════════════════════
-#  顶部导航栏
+#  顶部导航
 # ══════════════════════════════════════════════════════════════
 
 st.markdown("""
-<div style="background:linear-gradient(135deg,#1A1A2E,#16213E);padding:16px 24px;
-            border-radius:12px;margin-bottom:8px;display:flex;align-items:center;gap:16px">
-    <div style="font-size:24px;font-weight:800;color:#FFFFFF;letter-spacing:2px">
-        🏠 看房AI Book
-    </div>
-    <div style="font-size:14px;color:rgba(255,255,255,0.55);margin-left:auto">
-        北京房产估值与投资决策系统
+<div style="background:linear-gradient(135deg,#0F172A,#1E293B);padding:20px 28px;
+            border-radius:12px;margin-bottom:4px">
+    <div style="display:flex;align-items:center;gap:16px">
+        <div>
+            <div style="font-size:22px;font-weight:700;color:#FFFFFF;letter-spacing:2px">
+                🏠 看房AI Book
+            </div>
+            <div style="font-size:13px;color:rgba(255,255,255,0.5);margin-top:4px">
+                专业房产评估与购房决策系统
+            </div>
+        </div>
+        <div style="margin-left:auto;font-size:12px;color:rgba(255,255,255,0.35)">
+            面向投资者与自住客户的客观购房评估报告工具
+        </div>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════
-#  侧边栏：统一输入
+#  模式选择
 # ══════════════════════════════════════════════════════════════
 
-params = render_sidebar_v2()
+mode = st.sidebar.radio(
+    "📍 工作模式",
+    ["🏠 客户评估模式", "🔧 高级后台模式"],
+    key="app_mode"
+)
+
+is_client = mode == "🏠 客户评估模式"
 
 # ══════════════════════════════════════════════════════════════
-#  顶部操作按钮
+#  客户评估模式
 # ══════════════════════════════════════════════════════════════
 
-col_btn1, col_btn2, col_btn3 = st.columns([2, 1, 1])
-with col_btn1:
-    calc_btn = st.button("📊 开始测算", type="primary", use_container_width=True)
-with col_btn2:
-    poster_btn = st.button("🖼️ 生成海报", use_container_width=True)
-with col_btn3:
-    report_btn = st.button("📄 完整报告", use_container_width=True)
+if is_client:
+
+    # 侧边栏：房源输入
+    with st.sidebar:
+        st.caption("👤 当前：客户评估模式")
+    params = render_sidebar_v2()
+
+    # 顶部操作按钮
+    col_b1, col_b2, col_b3 = st.columns([2, 1, 1])
+    with col_b1:
+        calc_btn = st.button("📊 开始评估", type="primary", use_container_width=True)
+    with col_b2:
+        poster_btn = st.button("🖼️ 生成海报", use_container_width=True)
+    with col_b3:
+        report_btn = st.button("📄 完整报告", use_container_width=True)
+
+    st.divider()
+
+    # 6 个标签页
+    t_input, t_overview, t_valuation, t_invest, t_risk, t_report = st.tabs([
+        "📝 房源输入", "📋 总览结论", "🧠 估值分析", "📈 投资测算", "⚠️ 风险分析", "📄 专业报告"
+    ])
+
+    with t_input:
+        render_client_input(params)
+
+    with t_overview:
+        if calc_btn:
+            render_client_overview(params)
+        else:
+            st.info("👈 填写房源参数后，点击「📊 开始评估」查看总览结论")
+
+    with t_valuation:
+        if calc_btn:
+            render_client_valuation(params)
+        else:
+            st.info("👈 点击「📊 开始评估」查看估值分析")
+
+    with t_invest:
+        if calc_btn:
+            render_client_investment(params)
+        else:
+            st.info("👈 点击「📊 开始评估」查看投资测算")
+
+    with t_risk:
+        if calc_btn:
+            render_client_risk(params)
+        else:
+            st.info("👈 点击「📊 开始评估」查看风险分析")
+
+    with t_report:
+        render_client_report(params)
+
+    # 顶部按钮处理
+    if poster_btn:
+        render_poster()
+    if report_btn:
+        render_report()
 
 # ══════════════════════════════════════════════════════════════
-#  6 个标签页
+#  高级后台模式
 # ══════════════════════════════════════════════════════════════
 
-st.divider()
+else:
+    st.sidebar.caption("🔒 当前：高级后台模式")
 
-tab_overview, tab_valuation, tab_investment, tab_risk, tab_report, tab_advanced = \
-    st.tabs(["📋 总览结论", "🧠 估值分析", "📈 投资测算", "⚠️ 风险分析", "📄 专业报告", "🔧 高级模式"])
+    t_db, t_samples, t_import, t_params, t_quality, t_dash = st.tabs([
+        "🏘️ 小区数据库", "📊 成交样本库", "📥 数据导入",
+        "⚙️ 模型参数", "✅ 数据质量", "📈 研究仪表盘"
+    ])
 
-# ══════════════════════════════════════════════════════════════
-#  Tab A: 总览结论
-# ══════════════════════════════════════════════════════════════
+    with t_db:
+        render_admin_database()
 
-with tab_overview:
-    if calc_btn:
-        render_tab_overview(params)
-    else:
-        st.info("👈 在侧边栏填写房源信息后，点击「📊 开始测算」查看总览结论")
+    with t_samples:
+        render_admin_samples()
 
-# ══════════════════════════════════════════════════════════════
-#  Tab B: 估值分析
-# ══════════════════════════════════════════════════════════════
+    with t_import:
+        render_admin_import()
 
-with tab_valuation:
-    if calc_btn:
-        render_tab_valuation(params)
-    else:
-        st.info("👈 点击「📊 开始测算」查看估值分析")
+    with t_params:
+        render_admin_params()
 
-# ══════════════════════════════════════════════════════════════
-#  Tab C: 投资测算
-# ══════════════════════════════════════════════════════════════
+    with t_quality:
+        render_admin_quality()
 
-with tab_investment:
-    if calc_btn:
-        render_tab_investment(params)
-    else:
-        st.info("👈 点击「📊 开始测算」查看投资测算")
-
-# ══════════════════════════════════════════════════════════════
-#  Tab D: 风险分析
-# ══════════════════════════════════════════════════════════════
-
-with tab_risk:
-    if calc_btn:
-        render_tab_risk(params)
-    else:
-        st.info("👈 点击「📊 开始测算」查看风险分析")
-
-# ══════════════════════════════════════════════════════════════
-#  Tab E: 专业报告
-# ══════════════════════════════════════════════════════════════
-
-with tab_report:
-    render_tab_report(params)
-
-# ══════════════════════════════════════════════════════════════
-#  Tab F: 高级模式
-# ══════════════════════════════════════════════════════════════
-
-with tab_advanced:
-    render_tab_advanced(params)
-
-# ══════════════════════════════════════════════════════════════
-#  顶部按钮处理（海报/报告弹窗）
-# ══════════════════════════════════════════════════════════════
-
-if poster_btn:
-    render_poster()
-
-if report_btn:
-    render_report()
+    with t_dash:
+        render_admin_dashboard()
