@@ -2499,3 +2499,93 @@ def render_client_risk(params):
 def render_client_report(params):
     """客户模式——专业报告"""
     return render_tab_report(params)
+
+
+# ═══════════ Admin mode wrapper functions ═══════════
+
+def render_admin_database(params=None):
+    import streamlit as st
+    st.subheader("🏘️ 小区数据库")
+    st.info("当前为占位页。未来用于维护小区均价、成交均价、租金、学区、地铁、流动性等数据。")
+
+def render_admin_samples(params=None):
+    import streamlit as st
+    st.subheader("📊 成交样本库")
+    try:
+        from transaction_dataset import load_dataset
+        import pandas as pd
+        ds = load_dataset()
+        if ds:
+            st.metric("累计样本", len(ds))
+            rows = [{"小区": s.get("community_name","?")[:12], "区域": s.get("district","?"),
+                     "面积": s.get("area",0), "成交": s.get("final_transaction_price",0),
+                     "偏差": f"{s.get('estimation_deviation',0):+.1%}"} for s in ds[:50]]
+            st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+        else:
+            st.info("暂无成交样本。命令行运行：python3 transaction_input.py")
+    except ImportError:
+        st.warning("transaction_dataset 模块未加载")
+
+def render_admin_import(params=None):
+    import streamlit as st
+    st.subheader("📥 数据导入")
+    st.info("当前为占位页。未来支持手动录入、Excel、CSV、外部接口导入。命令行工具：python3 transaction_input.py")
+
+def render_admin_params(params=None):
+    import streamlit as st
+    st.subheader("⚙️ 模型参数")
+    try:
+        from valuation import DEFAULT_WEIGHTS
+        import pandas as pd
+        dim_names = {"location":"地段价值","liquidity":"流动性","property_quality":"房屋品质",
+            "cashflow":"现金流能力","school_public":"学区与公共资源","risk_resilience":"抗跌与风险",
+            "leverage_safety":"金融杠杆安全","macro_cycle":"宏观周期","scarcity_potential":"稀缺性与未来潜力"}
+        rows = [{"维度": dim_names.get(k,k), "权重": f"{v:.0%}"} for k,v in DEFAULT_WEIGHTS.items()]
+        st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+        st.caption("参数调整功能将在后续版本开放")
+    except ImportError:
+        st.warning("valuation 模块未加载")
+
+def render_admin_quality(params=None):
+    import streamlit as st
+    st.subheader("✅ 数据质量")
+    try:
+        from data_quality_system import data_health_report, coverage_analysis
+        from transaction_dataset import load_dataset
+        ds = load_dataset()
+        if ds:
+            health = data_health_report(ds)
+            cov = coverage_analysis(ds)
+            c1,c2,c3,c4 = st.columns(4)
+            c1.metric("样本", health["total"])
+            c2.metric("质量分", f"{health['avg_quality_score']:.0f}/100")
+            c3.metric("高质量", f"{health['high_quality_pct']}%")
+            c4.metric("异常", health["total_anomalies"])
+            st.caption(f"区域覆盖: {cov['total_districts_covered']}/12 | 资产类型: {cov['total_asset_types_covered']}/7")
+        else:
+            st.info("暂无成交数据")
+    except ImportError:
+        st.warning("数据质量模块未加载")
+
+def render_admin_dashboard(params=None):
+    import streamlit as st
+    st.subheader("📈 研究仪表盘")
+    try:
+        from research_dashboard import core_statistics, rank_properties, stability_ranking
+        from transaction_dataset import load_dataset
+        ds = load_dataset()
+        if ds:
+            stats = core_statistics(ds)
+            ranks = rank_properties(ds)
+            c1,c2,c3,c4 = st.columns(4)
+            c1.metric("样本", stats["total"])
+            c2.metric("偏差", f"{stats['avg_deviation']:+.1%}")
+            c3.metric("绝对偏差", f"{stats['avg_abs_deviation']:+.1%}")
+            c4.metric("趋势", stats["deviation_trend"])
+            st.subheader("⚠️ 高估")
+            for r in ranks["most_overvalued"][:3]:
+                st.markdown(f"- {r['name']} ({r['district']}) {r['deviation']:+.1%}")
+        else:
+            st.info("暂无数据。命令行运行：python3 research_dashboard.py")
+    except ImportError:
+        st.warning("research_dashboard 模块未加载")
