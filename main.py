@@ -1,5 +1,5 @@
 import streamlit as st
-from ui_components import set_global_style, render_sidebar, render_calc_result, render_poster, render_report
+from ui_components import set_global_style, render_sidebar, render_calc_result, render_poster, render_report, render_valuation
 
 # 设置全局样式（仅修复标题遮挡）
 set_global_style()
@@ -20,6 +20,8 @@ with col2:
     poster_btn_top = st.button("🖼️ 生成海报", use_container_width=True)
 
 report_btn_top = st.button("📄 生成基金级投资报告", use_container_width=True)
+
+val_btn_top = st.button("🧠 AI估值分析", use_container_width=True)
 st.divider()
 
 # ====================== 结果显示区域 ======================
@@ -46,3 +48,6 @@ if poster_btn_top:
 
 if report_btn_top:
     render_report()
+
+if val_btn_top:
+    render_valuation(params)
