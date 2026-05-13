@@ -6,6 +6,8 @@
 """
 
 import streamlit as st
+from datetime import datetime
+import time
 from ui_components import (
     set_global_style,
     render_sidebar_v2,
@@ -92,7 +94,13 @@ if is_client:
     # 顶部操作区
     col_b1, col_b2, col_b3 = st.columns([2, 1, 1])
     with col_b1:
-        eval_btn = st.button("📊 生成评估报告", type="primary", use_container_width=True)
+        if st.button("📊 生成评估报告", type="primary", use_container_width=True, key="gen_report_btn"):
+            st.session_state["report_generated"] = True
+            st.session_state["report_generated_at"] = datetime.now().strftime("%m-%d %H:%M")
+            st.session_state["client_active_tab"] = "📋 总览结论"
+            st.success("✅ 评估报告已生成，正在跳转到总览结论...")
+            time.sleep(0.5)
+            st.rerun()
     with col_b2:
         poster_btn = st.button("🖼️ 生成海报", use_container_width=True)
     with col_b3:
@@ -100,39 +108,65 @@ if is_client:
 
     st.divider()
 
-    # 6 个标签页
-    t_input, t_overview, t_valuation, t_invest, t_risk, t_report = st.tabs([
-        "📝 房源输入", "📋 总览结论", "🧠 估值分析", "📈 投资测算", "⚠️ 风险分析", "📄 专业报告"
-    ])
+    # 报告生成后的状态栏
+    if st.session_state.get("report_generated"):
+        comm = st.session_state.get("community", "—")
+        dist = st.session_state.get("district", "—")
+        area = st.session_state.get("area", 90)
+        price = st.session_state.get("total_price", "—")
+        gen_time = st.session_state.get("report_generated_at", "—")
+        st.markdown(f"""
+        <div style="background:#F0FDF4;border:1px solid #86EFAC;border-radius:8px;padding:8px 16px;margin-bottom:8px;font-size:13px;color:#166534">
+            📋 当前报告：{comm} ｜ {dist} ｜ {area}㎡ ｜ {price}万 ｜ 生成 {gen_time}
+        </div>
+        """, unsafe_allow_html=True)
 
-    with t_input:
+    # 客户标签页（radio 控制切换）
+    tab_options = ["📝 房源输入", "📋 总览结论", "🧠 估值分析", "📈 投资测算", "⚠️ 风险分析", "📄 专业报告"]
+    active_tab = st.radio("导航", tab_options, horizontal=True, label_visibility="collapsed",
+                          key="client_active_tab")
+
+    # 快捷导航按钮
+    report_generated = st.session_state.get("report_generated", False)
+    if report_generated and active_tab != "📝 房源输入":
+        col_nav1, col_nav2 = st.columns(2)
+        with col_nav1:
+            if st.button("🔙 返回修改房源", use_container_width=True, key="nav_back_input"):
+                st.session_state["client_active_tab"] = "📝 房源输入"
+                st.rerun()
+        with col_nav2:
+            if st.button("📄 查看专业报告", use_container_width=True, key="nav_to_report"):
+                st.session_state["client_active_tab"] = "📄 专业报告"
+                st.rerun()
+
+    if active_tab == "📝 房源输入":
         render_client_input(params)
 
-    with t_overview:
-        if eval_btn:
+    elif active_tab == "📋 总览结论":
+        if report_generated:
             render_client_overview(params)
         else:
-            st.info("👈 填写房源参数后，点击「📊 生成评估报告」查看总览结论")
+            st.info("👈 请先在「📝 房源输入」页填写信息并点击「📊 生成评估报告」")
 
-    with t_valuation:
-        if eval_btn:
+    elif active_tab == "🧠 估值分析":
+        if report_generated:
             render_client_valuation(params)
         else:
-            st.info("👈 点击「📊 生成评估报告」查看估值分析")
+            st.info("👈 请先在「📝 房源输入」页填写信息并点击「📊 生成评估报告」")
 
-    with t_invest:
-        if eval_btn:
+    elif active_tab == "📈 投资测算":
+        if report_generated:
             render_client_investment(params)
         else:
-            st.info("👈 点击「📊 生成评估报告」查看投资测算")
+            st.info("👈 请先在「📝 房源输入」页填写信息并点击「📊 生成评估报告」")
 
-    with t_risk:
-        if eval_btn:
+    elif active_tab == "⚠️ 风险分析":
+        if report_generated:
             render_client_risk(params)
         else:
-            st.info("👈 点击「📊 生成评估报告」查看风险分析")
+            st.info("👈 请先在「📝 房源输入」页填写信息并点击「📊 生成评估报告」")
 
-    with t_report:
+    elif active_tab == "📄 专业报告":
         render_client_report(params)
 
     # 顶部按钮处理
