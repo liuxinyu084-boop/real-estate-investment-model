@@ -368,7 +368,7 @@ def render_calc_result(params):
         "month_cash":round(hold_res["月净现金流"]),"profit":round(sell_res["总净利润"]/10000,2),
         "payback":payback_show,"ai_one":ai_one,"good":good,"risk":risk,
         "hold_period":hold_period,"risk_tip":risk_tip,"defect_score":defect_score,
-        "total_score":quant_score["total"]
+        "total_score":quant_score["total"],"area":area,"house_type":house_type
     }
 
     # 首页展示
@@ -643,9 +643,6 @@ def render_poster():
         st.markdown("---")
         st.markdown("<p style='text-align:center; color:#666;'>截图即可保存分享</p>", unsafe_allow_html=True)
     
-    show_poster()
-    
-    # 显示弹框
     show_poster()
 # 生成基金级报告（章节编号唯一+完整逻辑）
 def render_report():
