@@ -1,53 +1,134 @@
-import streamlit as st
-from ui_components import set_global_style, render_sidebar, render_calc_result, render_poster, render_report, render_valuation
+"""
+╔══════════════════════════════════════════════════════════════╗
+║  看房AI Book                                               ║
+║  北京房产估值与投资决策系统  V6.0                           ║
+║  Beijing Property Valuation & Investment Decision System   ║
+╚══════════════════════════════════════════════════════════════╝
+"""
 
-# 设置全局样式（仅修复标题遮挡）
+import streamlit as st
+from ui_components import (
+    set_global_style,
+    render_sidebar_v2,
+    render_tab_overview,
+    render_tab_valuation,
+    render_tab_investment,
+    render_tab_risk,
+    render_tab_report,
+    render_tab_advanced,
+    render_poster,
+    render_report,
+)
+
+# ══════════════════════════════════════════════════════════════
+#  页面配置
+# ══════════════════════════════════════════════════════════════
+
 set_global_style()
 
-# 页面标题
-st.title("🏠 北京房产投资 | 基金级专业评估")
-st.divider()
+# ══════════════════════════════════════════════════════════════
+#  顶部导航栏
+# ══════════════════════════════════════════════════════════════
 
-# 渲染侧边栏获取参数
-params = render_sidebar()
+st.markdown("""
+<div style="background:linear-gradient(135deg,#1A1A2E,#16213E);padding:16px 24px;
+            border-radius:12px;margin-bottom:8px;display:flex;align-items:center;gap:16px">
+    <div style="font-size:24px;font-weight:800;color:#FFFFFF;letter-spacing:2px">
+        🏠 看房AI Book
+    </div>
+    <div style="font-size:14px;color:rgba(255,255,255,0.55);margin-left:auto">
+        北京房产估值与投资决策系统
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
-# ====================== 顶部固定按钮区域（永远在最上方）======================
-col1, col2 = st.columns(2)
-with col1:
+# ══════════════════════════════════════════════════════════════
+#  侧边栏：统一输入
+# ══════════════════════════════════════════════════════════════
+
+params = render_sidebar_v2()
+
+# ══════════════════════════════════════════════════════════════
+#  顶部操作按钮
+# ══════════════════════════════════════════════════════════════
+
+col_btn1, col_btn2, col_btn3 = st.columns([2, 1, 1])
+with col_btn1:
     calc_btn = st.button("📊 开始测算", type="primary", use_container_width=True)
+with col_btn2:
+    poster_btn = st.button("🖼️ 生成海报", use_container_width=True)
+with col_btn3:
+    report_btn = st.button("📄 完整报告", use_container_width=True)
 
-with col2:
-    poster_btn_top = st.button("🖼️ 生成海报", use_container_width=True)
+# ══════════════════════════════════════════════════════════════
+#  6 个标签页
+# ══════════════════════════════════════════════════════════════
 
-report_btn_top = st.button("📄 生成基金级投资报告", use_container_width=True)
-
-val_btn_top = st.button("🧠 AI估值分析", use_container_width=True)
 st.divider()
 
-# ====================== 结果显示区域 ======================
-result_container = st.container()
+tab_overview, tab_valuation, tab_investment, tab_risk, tab_report, tab_advanced = \
+    st.tabs(["📋 总览结论", "🧠 估值分析", "📈 投资测算", "⚠️ 风险分析", "📄 专业报告", "🔧 高级模式"])
 
-with result_container:
+# ══════════════════════════════════════════════════════════════
+#  Tab A: 总览结论
+# ══════════════════════════════════════════════════════════════
+
+with tab_overview:
     if calc_btn:
-        # 执行计算并显示结果
-        render_calc_result(params)
-        
-        # 结果顶部快捷按钮（测算后自动显示，无需滚动回顶部）
-        st.divider()
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("🖼️ 生成海报（快捷）", use_container_width=True):
-                render_poster()
-        with col2:
-            if st.button("📄 生成基金级报告（快捷）", use_container_width=True):
-                render_report()
+        render_tab_overview(params)
+    else:
+        st.info("👈 在侧边栏填写房源信息后，点击「📊 开始测算」查看总览结论")
 
-# 处理顶部按钮点击
-if poster_btn_top:
+# ══════════════════════════════════════════════════════════════
+#  Tab B: 估值分析
+# ══════════════════════════════════════════════════════════════
+
+with tab_valuation:
+    if calc_btn:
+        render_tab_valuation(params)
+    else:
+        st.info("👈 点击「📊 开始测算」查看估值分析")
+
+# ══════════════════════════════════════════════════════════════
+#  Tab C: 投资测算
+# ══════════════════════════════════════════════════════════════
+
+with tab_investment:
+    if calc_btn:
+        render_tab_investment(params)
+    else:
+        st.info("👈 点击「📊 开始测算」查看投资测算")
+
+# ══════════════════════════════════════════════════════════════
+#  Tab D: 风险分析
+# ══════════════════════════════════════════════════════════════
+
+with tab_risk:
+    if calc_btn:
+        render_tab_risk(params)
+    else:
+        st.info("👈 点击「📊 开始测算」查看风险分析")
+
+# ══════════════════════════════════════════════════════════════
+#  Tab E: 专业报告
+# ══════════════════════════════════════════════════════════════
+
+with tab_report:
+    render_tab_report(params)
+
+# ══════════════════════════════════════════════════════════════
+#  Tab F: 高级模式
+# ══════════════════════════════════════════════════════════════
+
+with tab_advanced:
+    render_tab_advanced(params)
+
+# ══════════════════════════════════════════════════════════════
+#  顶部按钮处理（海报/报告弹窗）
+# ══════════════════════════════════════════════════════════════
+
+if poster_btn:
     render_poster()
 
-if report_btn_top:
+if report_btn:
     render_report()
-
-if val_btn_top:
-    render_valuation(params)
