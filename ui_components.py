@@ -2480,3 +2480,22 @@ def _ensure_defaults():
         if k not in st.session_state:
             st.session_state[k] = v
 
+
+
+# ═══════════ Compat wrappers for main.py imports ═══════════
+
+def render_client_overview(params):
+    return render_tab_overview(params)
+
+def render_client_valuation(params):
+    return render_tab_valuation(params)
+
+def render_client_investment(params):
+    return render_tab_investment(params)
+
+def render_client_risk(params):
+    return render_tab_risk(params)
+
+def render_client_report(params):
+    """客户模式——专业报告"""
+    return render_tab_report(params)
