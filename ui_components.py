@@ -1077,7 +1077,10 @@ def render_valuation(params):
     st.divider()
     st.header("🧠 AI 估值分析")
 
-    # ── 估值结论卡片 ──
+    # ═══════════ 1. AI 最终结论（真人顾问风格）═══════════
+    _render_advisor_conclusion(result, conf, p)
+
+    # ═══════════ 2. 估值结论卡片 ═══════════
     icon = result["level_icon"]
     level = result["valuation_level"]
     bg = "#ECFDF5" if "低估" in level else "#FEF2F2" if "高估" in level else "#F0F7FF"
@@ -1089,8 +1092,8 @@ def render_valuation(params):
     </div>
     """, unsafe_allow_html=True)
 
-    # ── 三价对比 ──
-    st.subheader("💰 估值 vs 报价 vs 预测成交")
+    # ═══════════ 3. 三价对比 ═══════════
+    st.subheader("💰 三价对比")
     c1, c2, c3 = st.columns(3)
     c1.metric("📋 挂牌价", f"{result['asking_price']:.0f} 万元")
     c2.metric("🧠 模型估值", f"{result['final_model_value']:.0f} 万元",
@@ -1098,54 +1101,20 @@ def render_valuation(params):
     c3.metric("🤝 预测成交价", f"{result['estimated_final_transaction_price']:.0f} 万元",
               delta=f"{result['predicted_negotiation_range'][0]:.0%}~{result['predicted_negotiation_range'][1]:.0%} 议价")
 
-    # ── 核心指标卡片 ──
-    st.subheader("📊 估值核心指标")
+    # ═══════════ 4. 核心指标 ═══════════
+    st.subheader("📊 核心指标")
     m1, m2, m3, m4, m5 = st.columns(5)
     m1.metric("安全边际", f"{result['safety_margin']:+.1%}")
-    m2.metric("微观评分", f"{result['micro_unit_score']}")
-    m3.metric("流动性评分", f"{result['liquidity_score']}")
-    m4.metric("市场参考价", f"{result['market_reference_value']:.0f}万")
+    m2.metric("微观评分", f"{result['micro_unit_score']}/100")
+    m3.metric("流动性", f"{result['liquidity_score']}/100")
+    m4.metric("参考价", f"{result['market_reference_value']:.0f}万")
     m5.metric("议价空间", f"{result['predicted_negotiation_range'][0]:.0%}~{result['predicted_negotiation_range'][1]:.0%}")
 
-    # ── 资产类型识别 ──
-    st.subheader("🏷️ 资产类型识别")
+    # ═══════════ 5. 资产类型 ═══════════
+    st.subheader("🏷️ 资产类型")
     st.info(f"**{result['asset_name']}** — {result['asset_features']}")
-    if result.get("activated_rules"):
-        st.caption(f"✅ 激活规则：{', '.join(result['activated_rules'])}")
-    if result.get("disabled_rules"):
-        st.caption(f"⛔ 关闭规则：{', '.join(result['disabled_rules'])}")
 
-    # ── 估值逻辑说明：加减分 ──
-    col_left, col_right = st.columns(2)
-    with col_left:
-        st.subheader("🟢 加分项")
-        pos = [d for d in result.get("core_details", []) if d["adjustment"] > 0.002]
-        pos += [d for d in result.get("macro_details", []) if d["adjustment"] > 0.002]
-        pos += [d for d in result.get("liquidity_details", []) if d["adjustment"] > 0]
-        pos.sort(key=lambda x: -x["adjustment"])
-        for d in pos[:8]:
-            st.markdown(f"+ **{d['factor_name']}**：{d['value']} → +{d['adjustment']:.0%}")
-    with col_right:
-        st.subheader("🔴 减分项")
-        neg = [d for d in result.get("core_details", []) if d["adjustment"] < -0.002]
-        neg += [d for d in result.get("macro_details", []) if d["adjustment"] < -0.002]
-        neg += [d for d in result.get("liquidity_details", []) if d["adjustment"] < 0]
-        neg.sort(key=lambda x: x["adjustment"])
-        for d in neg[:8]:
-            st.markdown(f"- **{d['factor_name']}**：{d['value']} → {d['adjustment']:.0%}")
-
-    # ── TOP5 影响因子 ──
-    st.subheader("📈 TOP5 影响因子")
-    all_adj = result.get("core_details", []) + result.get("macro_details", []) + result.get("liquidity_details", [])
-    all_adj.sort(key=lambda x: -abs(x["adjustment"]))
-    top5 = all_adj[:5]
-    for i, d in enumerate(top5):
-        sign = "+" if d["adjustment"] >= 0 else ""
-        st.progress(min(abs(d["adjustment"]) * 8, 1.0),
-                     text=f"{i+1}. {d['factor_name']}: {d['value']} ({sign}{d['adjustment']:.0%})")
-
-    # ── 流动性分析 ──
-    st.subheader("💧 流动性分析")
+    # ═══════════ 6. 加减分项（自然语言）══
     lq = result["liquidity_score"]
     if lq >= 70: diff = "容易出手"
     elif lq >= 50: diff = "正常周转"
@@ -1168,3 +1137,204 @@ def _map_parking(ratio):
     return m.get(ratio, "1:1")
 
 import os
+
+
+# ═══ 估值分析辅助函数：人性化文案 ═══
+
+def _render_advisor_conclusion(result, conf, p):
+    """AI 最终结论——像真人投资顾问"""
+    level = result["valuation_level"]
+    margin = result["safety_margin"]
+    atype = result["asset_name"]
+    model = result["final_model_value"]
+    ask = result["asking_price"]
+    nego = result["predicted_negotiation_range"]
+
+    # 核心逻辑
+    if "低估" in level:
+        core = f"该房源当前报价 {ask:.0f} 万，我们的模型估值约 {model:.0f} 万，" \
+               f"报价比模型估值低约 {abs(margin):.0%}。"
+    elif "高估" in level:
+        core = f"该房源当前报价 {ask:.0f} 万，我们的模型估值约 {model:.0f} 万，" \
+               f"报价比模型估值高出约 {abs(margin):.0%}。"
+    else:
+        core = f"报价 {ask:.0f} 万与模型估值 {model:.0f} 万基本吻合，偏差仅 {abs(margin):.0%}。"
+
+    # 资产类型解释
+    type_explain = {
+        "豪宅型": "这类资产定位高端，但买家池天然窄，流动性偏弱，议价空间通常较大。",
+        "核心学区房": "学区是绝对硬通货，但需警惕政策变动风险。西城海淀顶级学区房长期看仍具稀缺价值。",
+        "普通改善型": "市场最大公约数，流通性尚可，估值模型对此类房源置信度最高。",
+        "别墅型": "北京别墅市场受众窄、变现周期长，但有稀缺土地资源的独栋仍有长期持有价值。",
+        "高风险型": "此类资产天然存在折价。回迁房/经适房受限于产权和贷款政策，商住两用税费和流动性是硬伤。",
+        "老破小流动型": "刚需上车盘，总价敏感但流动性不差。核心看地段+总价+地铁三要素。",
+        "投资收租型": "核心看租售比和地铁。这类资产不追增值，稳现金流是第一要义。",
+    }
+    explain = type_explain.get(atype, "")
+
+    # 建议方向
+    if "明显低估" in level:
+        advice = "如果你对这套房源本身满意，当前报价具备不错的安全边际，可以重点关注。"
+    elif "略低估" in level:
+        advice = f"报价略低于模型估值，建议争取在 {nego[0]:.0%}~{nego[1]:.0%} 的议价空间内锁定。"
+    elif "明显高估" in level:
+        advice = f"当前价格明显偏高，建议大幅压价（至少 {nego[0]:.0%} 以上）。如果卖家态度坚决，可以考虑寻找替代标的。"
+    elif "略高估" in level:
+        advice = f"价格略高但不算离谱。建议以 {nego[0]:.0%}~{nego[1]:.0%} 的幅度进行议价谈判。"
+    else:
+        advice = "当前报价与模型估值基本一致，买卖双方预期对等，可按市场价直接推进交易。"
+
+    st.markdown(f"""
+    <div style="background:#F8FAFC;border-left:4px solid #2563EB;border-radius:8px;padding:20px;margin:10px 0;font-size:15px;line-height:1.8;color:#334155">
+        <div style="font-size:18px;font-weight:700;color:#1E293B;margin-bottom:12px">💬 投资顾问分析</div>
+        <p>{core}</p>
+        <p>{explain}</p>
+        <p style="font-weight:600;color:#1E293B">{advice}</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+def _humanize_factor(factor_name, value, adj):
+    """将加减分因子转化为自然语言"""
+    templates = {
+        "朝向": lambda v, a: f"{'南北通透' if v=='南北通透' else v}朝向，{'采光和通风条件较好，对自住体验和未来转手都有加分' if a>0 else '采光方面有一定不足，在北京市场属于减分因素'}",
+        "楼层": lambda v, a: f"{v}位置，{'在市场中比较受欢迎，看房体验好' if a>0 else '部分买家对此有顾虑（如顶层漏水风险、底层隐私问题）'}",
+        "装修程度": lambda v, a: f"{v}装修，{'入住成本低，对买家有吸引力' if a>0 else '买家需预留额外装修预算，会作为压价理由'}",
+        "电梯条件": lambda v, a: f"{v}，{'日常出行便利' if a>0 else '这是刚需硬伤，爬楼对老人和带小孩的家庭极不友好'}",
+        "房龄": lambda v, a: f"房龄{v}年，{'楼龄较新，贷款年限和居住体验都更有优势' if a>0 else '贷款年限受限，物业和管线老化是需要关注的风险点'}",
+        "学区等级": lambda v, a: f"学区{v}，{'在家长群体中关注度较高，有一定学区溢价' if a>0 else '学区资源是这部分房源的核心考量'}",
+        "地铁距离": lambda v, a: f"地铁{v}，{'通勤便利性对刚需买家吸引力较强' if a>0 else '对依赖地铁通勤的买家影响较大'}",
+        "物业品质": lambda v, a: f"物业{v}，{'对小区长期保值有正向作用' if a>0 else '物业管理影响了居住品质和小区形象'}",
+        "景观视野": lambda v, a: f"{v}，{'稀缺景观资源是长期持有的加分项' if a>0 else ''}",
+        "噪音影响": lambda v, a: f"{v}噪音环境，{'居住舒适度高' if a>0 else '噪音会对居住体验产生持续影响'}",
+        "采光评分": lambda v, a: f"采光{v}，{'室内明亮通透，看房时第一印象好' if a>0 else '采光不足会影响居住舒适度和转手时买家意愿'}",
+        "户型评分": lambda v, a: f"{v}户型，{'方正实用，空间利用率高' if a>0 else '户型问题是中后期转手时比较被动的因素'}",
+        "户型缺陷": lambda v, a: f"户型有{v}问题，{'户型缺陷在二手市场直接影响看房转化率' if a<0 else ''}",
+        "车位": lambda v, a: f"{v}，{'北京车位紧张，带车位是看得见的便利' if a>0 else '在北京，车位短缺会影响部分买家的购买意愿'}",
+        "硬伤缺陷": lambda v, a: f"{v}，{'这类问题在市场上存在明显的心理折价，买家普遍会以此为由大幅压价' if a<0 else ''}",
+        "产权税费": lambda v, a: f"{v}，{'交易环节税费低，对买家实际成本更友好' if a>0 else '税费较高，会在谈判中被买家作为压价依据'}",
+    }
+    if factor_name in templates:
+        return templates[factor_name](value, adj)
+    return f"{factor_name}（{value}），{'对该房源有一定加分' if adj>0 else '对该房源造成一定减分'}"
+
+
+def _render_factors_human(result):
+    """人性化展示加减分"""
+    col_left, col_right = st.columns(2)
+    all_adj = result.get("core_details", []) + result.get("macro_details", []) + result.get("liquidity_details", [])
+
+    pos = [d for d in all_adj if d["adjustment"] > 0.002]
+    neg = [d for d in all_adj if d["adjustment"] < -0.002]
+    pos.sort(key=lambda x: -x["adjustment"])
+    neg.sort(key=lambda x: x["adjustment"])
+
+    with col_left:
+        st.subheader("🟢 加分项")
+        for d in pos[:8]:
+            text = _humanize_factor(d["factor_name"], d["value"], d["adjustment"])
+            st.markdown(f"> {text}")
+
+    with col_right:
+        st.subheader("🔴 减分项")
+        for d in neg[:8]:
+            text = _humanize_factor(d["factor_name"], d["value"], d["adjustment"])
+            st.markdown(f"> {text}")
+
+
+def _render_risk_warnings(result, p):
+    """风险提示"""
+    risks = []
+    atype = result["asset_name"]
+    asking = result["asking_price"]
+    age = p.get("house_age", 5)
+    school = p.get("school_level", "普通学区")
+    lq = result["liquidity_score"]
+    prop_type = p.get("property_type", "商品房")
+
+    if "高估" in result["valuation_level"]:
+        risks.append(("🔴 高位接盘风险", "当前报价偏高，如果以这个价格买入，短期可能面临资产缩水压力，尤其在市场下行周期。"))
+    if age >= 20:
+        risks.append(("🟡 老房龄风险", f"房龄 {age} 年，银行贷款审批可能受限（部分银行拒贷超 30 年房龄），且管线老化、维修成本逐年上升。"))
+    if school in ["顶尖名校", "市重点"]:
+        risks.append(("🟡 学区政策风险", "学区房最大的不确定性来自政策端。多校划片范围调整、学位名额变化都可能影响学区溢价。"))
+    if result.get("decoration_level") == "豪装" and atype == "豪宅型":
+        risks.append(("🟡 豪装折旧风险", "高端装修贬值速度快，5 年后装修溢价基本归零。不要为装修过度买单。"))
+    if lq < 40:
+        risks.append(("🔴 流动性风险", f"该房源流动性评分仅 {lq}/100，接盘能力偏弱。如果未来需要快速变现，可能需要大幅折价。"))
+    if prop_type in ["回迁房", "经济适用房", "商住两用"]:
+        risks.append(("🔴 产权与税费风险", f"{prop_type} 存在贷款受限、税费高、交易周期长等问题，买家群体天然偏窄。"))
+    if asking >= 1000:
+        risks.append(("🟡 高总价风险", f"总价 {asking:.0f} 万已进入高端市场区间，买家池小、议价空间大、变现周期长是这类资产的共性特征。"))
+
+    if risks:
+        st.subheader("⚠️ 风险提示")
+        for title, detail in risks[:6]:
+            with st.expander(title):
+                st.write(detail)
+    else:
+        st.subheader("⚠️ 风险提示")
+        st.success("未发现显著风险因素，该房源整体风险可控。")
+
+
+def _render_suitable_buyers(result, p):
+    """适合人群"""
+    st.subheader("👥 适合人群")
+    atype = result["asset_name"]
+    lq = result["liquidity_score"]
+    margin = result["safety_margin"]
+    area = p.get("area", 90)
+    rental = p.get("rental_yield", 1.5)
+
+    buyers = []
+    if "低估" in result["valuation_level"]:
+        buyers.append(("💰 价值投资者", "当前报价低于模型估值，存在一定的安全边际。如果你相信市场会均值回归，这类标的值得关注。"))
+    if atype == "核心学区房":
+        buyers.append(("🎒 学区刚需家庭", "孩子上学是刚需，学区房对这类家庭的优先级远超价格。"))
+    if area <= 80 and lq >= 50:
+        buyers.append(("🔑 首次置业刚需", "面积适中、总价可控，适合预算有限的年轻家庭作为第一套房。"))
+    if area >= 120:
+        buyers.append(("🏡 改善型家庭", "面积充裕，适合家庭成员较多、追求居住品质的改善需求。"))
+    if rental and rental >= 2.0:
+        buyers.append(("📊 稳健收租型", f"租售比约 {rental:.1f}%，现金流稳定，适合追求租金回报而非短期升值的投资者。"))
+    if lq >= 60:
+        buyers.append(("🔄 短线投资者", "流动性好意味着买入后容易卖出，适合对市场有判断、追求快速周转的玩家。"))
+    if atype == "豪宅型" or atype == "别墅型":
+        buyers.append(("🏰 长期持有型", "这类资产不适合短线操作。自住享受 + 长期资产配置才是正确的打开方式。"))
+    if not buyers:
+        buyers.append(("🤔 需谨慎评估型", "当前条件不突出，建议结合自身实际需求综合判断。"))
+
+    for title, desc in buyers[:5]:
+        st.markdown(f"**{title}**：{desc}")
+
+
+def _render_action_advice(result, p):
+    """建议动作"""
+    st.subheader("🎯 建议动作")
+    level = result["valuation_level"]
+    margin = result["safety_margin"]
+    lq = result["liquidity_score"]
+    nego = result["predicted_negotiation_range"]
+    atype = result["asset_name"]
+
+    advice = []
+    if "明显低估" in level:
+        advice.append(("🟢 建议重点关注", "该房源当前报价显著低于模型估值。如果实地看房后确认房屋状况良好（无隐藏硬伤），建议尽快锁定。"))
+        advice.append(("🟢 可适当放宽议价", f"安全边际充足（+{margin:.0%}），即使在卖家底价上浮 3%-5% 成交，仍在合理区间。"))
+    elif "略低估" in level:
+        advice.append(("🟡 建议继续谈判", f"有一定安全边际（+{margin:.0%}），可以争取在 {nego[0]:.0%}~{nego[1]:.0%} 的折扣区间成交。"))
+    elif "明显高估" in level:
+        advice.append(("🔴 建议大幅压价", f"当前价格远高于模型估值，建议至少压价 {abs(margin):.0%} 以上。如卖家不松动，果断放弃。"))
+        advice.append(("🔴 建议寻找替代标的", "同小区/同区域很可能存在性价比更高的房源，不要让锚定效应影响判断。"))
+    elif "略高估" in level:
+        advice.append(("🟠 建议适度议价", f"价格略高但不算离港。建议以 {nego[0]:.0%}~{nego[1]:.0%} 幅度议价。"))
+    else:
+        advice.append(("⚪ 价格合理，正常推进", "买卖双方预期匹配，按市场价推进交易即可，无需过度纠结。"))
+
+    if lq < 40:
+        advice.append(("⚠️ 不建议短期投资", "流动性偏弱，不适合作为短线标的。如有自住需求可以买入，但需做好长期持有的准备。"))
+    if atype in ["高风险型"]:
+        advice.append(("⚠️ 需充分尽调", f"{atype}类资产建议在交易前全面核实产权状态、抵押情况、税费明细，避免踩坑。"))
+
+    for icon_title, desc in advice[:6]:
+        st.markdown(f"**{icon_title}**：{desc}")
